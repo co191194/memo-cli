@@ -7,7 +7,7 @@ import (
 )
 
 type Memo struct {
-	ID        int       `json:"id`
+	ID        int       `json:"id"`
 	Title     string    `json:"title"`
 	Body      string    `json:"body"`
 	CreatedAt time.Time `json:"created_at"`
