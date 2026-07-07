@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -54,20 +53,29 @@ func SaveMemos(path string, memos []Memo) error {
 		return err
 	}
 
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0644)
+	tmpFile, err := os.CreateTemp(dirPath, ".memos-*.json")
 	if err != nil {
-		fmt.Println("JSONファイルが開けません", err)
 		return err
 	}
-	defer file.Close()
+	tmpPath := tmpFile.Name()
+	defer os.Remove(tmpPath)
 
-	encoder := json.NewEncoder(file)
-
+	encoder := json.NewEncoder(tmpFile)
 	encoder.SetIndent("", "  ")
 
-	if err = encoder.Encode(memos); err != nil {
+	if err := encoder.Encode(memos); err != nil {
+		tmpFile.Close()
 		return err
 	}
+
+	if err := tmpFile.Close(); err != nil {
+		return err
+	}
+
+	if err := os.Rename(tmpPath, path); err != nil {
+		return err
+	}
+
 	return nil
 }
 
