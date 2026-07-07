@@ -26,7 +26,10 @@ func LoadMemos(path string) ([]Memo, error) {
 
 	file, err := os.Open(path)
 	if err != nil {
-		return []Memo{}, nil
+		if os.IsNotExist(err) {
+			return []Memo{}, nil
+		}
+		return nil, err
 	}
 	defer file.Close()
 
