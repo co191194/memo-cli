@@ -84,7 +84,7 @@ func ShowMemo(id int) {
 			return
 		}
 	}
-	fmt.Printf("memo not found: %d\n", id)
+	printNotFoundMemo(id)
 	os.Exit(1)
 }
 
@@ -109,6 +109,34 @@ func SearchMemos(keyword string) {
 	}
 }
 
+func DeleteMemo(id int) {
+	memos, err := LoadMemos(path)
+	if err != nil {
+		printOpenFileError(err)
+	}
+
+	newMemos := []Memo{}
+	existsMemo := false
+
+	for _, memo := range memos {
+		if memo.ID != id {
+			newMemos = append(newMemos, memo)
+		} else {
+			existsMemo = true
+		}
+	}
+
+	if !existsMemo {
+		printNotFoundMemo(id)
+		os.Exit(1)
+	}
+
+	if err := SaveMemos(path, newMemos); err != nil {
+		fmt.Println("メモを削除できませんでした", err)
+		os.Exit(1)
+	}
+}
+
 func printOpenFileError(err error) {
 	fmt.Println("メモを開くことができませんでした", err)
 	os.Exit(1)
@@ -116,4 +144,8 @@ func printOpenFileError(err error) {
 
 func printMemoForList(memo Memo) {
 	fmt.Printf("%d %s\t%s\n", memo.ID, memo.Title, memo.CreatedAt.Format("2006-01-02"))
+}
+
+func printNotFoundMemo(id int) {
+	fmt.Printf("memo not found: %d\n", id)
 }
