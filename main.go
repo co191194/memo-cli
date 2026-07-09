@@ -26,8 +26,12 @@ func main() {
 		}
 		AddMemo(os.Args[2])
 	case "list":
-		fmt.Println("not implemented")
-		os.Exit(1)
+		if len(os.Args) != 2 {
+			fmt.Println("Usage:")
+			fmt.Println("  memo list")
+			os.Exit(1)
+		}
+		ListMemos()
 	case "show":
 		fmt.Println("not implemented")
 		os.Exit(1)

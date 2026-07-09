@@ -12,8 +12,7 @@ func AddMemo(title string) {
 
 	memos, err := LoadMemos(path)
 	if err != nil {
-		fmt.Println("メモを開くことができませんでした", err)
-		os.Exit(1)
+		printOpenFileError(err)
 	}
 
 	var id int
@@ -46,4 +45,24 @@ func AddMemo(title string) {
 		fmt.Println("メモの保存に失敗しました", err)
 		os.Exit(1)
 	}
+}
+
+func ListMemos() {
+	memos, err := LoadMemos(path)
+	if err != nil {
+		printOpenFileError(err)
+	}
+
+	if len(memos) == 0 {
+		fmt.Println("No memos found.")
+	} else {
+		for _, memo := range memos {
+			fmt.Printf("%d %s\t%s\n", memo.ID, memo.Title, memo.CreatedAt.Format("2006-01-02"))
+		}
+	}
+}
+
+func printOpenFileError(err error) {
+	fmt.Println("メモを開くことができませんでした", err)
+	os.Exit(1)
 }
