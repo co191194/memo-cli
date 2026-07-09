@@ -78,6 +78,8 @@ func ShowMemo(id int) {
 			fmt.Println("ID: " + strconv.Itoa(memo.ID))
 			fmt.Println("Created : " + memo.CreatedAt.Format(DATE_TIME_FORMAT))
 			fmt.Println("Updated : " + memo.UpdatedAt.Format(DATE_TIME_FORMAT))
+			fmt.Println()
+			fmt.Println(memo.Body)
 			return
 		}
 	}
