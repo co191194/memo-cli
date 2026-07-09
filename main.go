@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -33,8 +34,17 @@ func main() {
 		}
 		ListMemos()
 	case "show":
-		fmt.Println("not implemented")
-		os.Exit(1)
+		if len(os.Args) != 3 {
+			fmt.Println("Usage:")
+			fmt.Println("  memo show <id>")
+			os.Exit(1)
+		}
+		id, err := strconv.Atoi(os.Args[2])
+		if err != nil {
+			fmt.Println("idは数値を入力してください: " + os.Args[2])
+			os.Exit(1)
+		}
+		ShowMemo(id)
 	case "search":
 		fmt.Println("not implemented")
 		os.Exit(1)

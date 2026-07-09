@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -60,6 +61,27 @@ func ListMemos() {
 			fmt.Printf("%d %s\t%s\n", memo.ID, memo.Title, memo.CreatedAt.Format("2006-01-02"))
 		}
 	}
+}
+
+const DATE_TIME_FORMAT = "2006-01-02 15:04"
+
+func ShowMemo(id int) {
+	memos, err := LoadMemos(path)
+	if err != nil {
+		printOpenFileError(err)
+	}
+
+	for _, memo := range memos {
+		if memo.ID == id {
+			fmt.Println("# " + memo.Title)
+			fmt.Println()
+			fmt.Println("ID: " + strconv.Itoa(memo.ID))
+			fmt.Println("Created : " + memo.CreatedAt.Format(DATE_TIME_FORMAT))
+			fmt.Println("Updated : " + memo.UpdatedAt.Format(DATE_TIME_FORMAT))
+			return
+		}
+	}
+	fmt.Printf("memo not found: %d\n", id)
 }
 
 func printOpenFileError(err error) {
