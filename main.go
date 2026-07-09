@@ -39,11 +39,7 @@ func main() {
 			fmt.Println("  memo show <id>")
 			os.Exit(1)
 		}
-		id, err := strconv.Atoi(os.Args[2])
-		if err != nil {
-			fmt.Println("idは数値を入力してください: " + os.Args[2])
-			os.Exit(1)
-		}
+		id := resolveId(os.Args[2])
 		ShowMemo(id)
 	case "search":
 		if len(os.Args) != 3 {
@@ -57,8 +53,13 @@ func main() {
 		}
 		SearchMemos(os.Args[2])
 	case "delete":
-		fmt.Println("not implemented")
-		os.Exit(1)
+		if len(os.Args) != 3 {
+			fmt.Println("Usage:")
+			fmt.Println("  memo delete <id>")
+			os.Exit(1)
+		}
+		id := resolveId(os.Args[2])
+		DeleteMemo(id)
 	default:
 		printHelp()
 		os.Exit(1)
@@ -84,4 +85,13 @@ func isEmpty(str string) bool {
 func printEmptyError(name string) {
 	fmt.Println(name + "を入力してください")
 	os.Exit(1)
+}
+
+func resolveId(id string) int {
+	resolveId, err := strconv.Atoi(id)
+	if err != nil {
+		fmt.Println("idは数値を入力してください: " + id)
+		os.Exit(1)
+	}
+	return resolveId
 }
