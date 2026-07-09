@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -58,7 +59,7 @@ func ListMemos() {
 		fmt.Println("No memos found.")
 	} else {
 		for _, memo := range memos {
-			fmt.Printf("%d %s\t%s\n", memo.ID, memo.Title, memo.CreatedAt.Format("2006-01-02"))
+			printMemoForList(memo)
 		}
 	}
 }
@@ -87,7 +88,32 @@ func ShowMemo(id int) {
 	os.Exit(1)
 }
 
+func SearchMemos(keyword string) {
+	memos, err := LoadMemos(path)
+	if err != nil {
+		printOpenFileError(err)
+	}
+
+	countHitMemos := 0
+
+	for _, memo := range memos {
+		if strings.Contains(memo.Title, keyword) || strings.Contains(memo.Body, keyword) {
+			printMemoForList(memo)
+			countHitMemos += 1
+		}
+	}
+
+	if countHitMemos == 0 {
+		fmt.Println("No matching memos found.")
+		os.Exit(1)
+	}
+}
+
 func printOpenFileError(err error) {
 	fmt.Println("メモを開くことができませんでした", err)
 	os.Exit(1)
+}
+
+func printMemoForList(memo Memo) {
+	fmt.Printf("%d %s\t%s\n", memo.ID, memo.Title, memo.CreatedAt.Format("2006-01-02"))
 }
