@@ -84,6 +84,7 @@ func ShowMemo(id int) {
 		}
 	}
 	fmt.Printf("memo not found: %d\n", id)
+	os.Exit(1)
 }
 
 func printOpenFileError(err error) {
