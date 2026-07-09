@@ -16,8 +16,8 @@ func main() {
 
 	switch os.Args[1] {
 	case "add":
-		if len(os.Args) == 2 || strings.TrimSpace(os.Args[2]) == "" {
-			fmt.Println("タイトルを入力してください")
+		if len(os.Args) == 2 || isEmpty(os.Args[2]) {
+			printEmptyError("タイトル")
 			os.Exit(1)
 		}
 		if len(os.Args) != 3 {
@@ -46,8 +46,16 @@ func main() {
 		}
 		ShowMemo(id)
 	case "search":
-		fmt.Println("not implemented")
-		os.Exit(1)
+		if len(os.Args) != 3 {
+			fmt.Println("Usage:")
+			fmt.Println("  memo search <keyword>")
+			os.Exit(1)
+		}
+		keyword := os.Args[2]
+		if isEmpty(keyword) {
+			printEmptyError("キーワード")
+		}
+		SearchMemos(os.Args[2])
 	case "delete":
 		fmt.Println("not implemented")
 		os.Exit(1)
@@ -67,4 +75,13 @@ func printHelp() {
 	fmt.Println("  show    Show a memo")
 	fmt.Println("  search  Search memos")
 	fmt.Println("  delete  delete a memo")
+}
+
+func isEmpty(str string) bool {
+	return strings.TrimSpace(str) == ""
+}
+
+func printEmptyError(name string) {
+	fmt.Println(name + "を入力してください")
+	os.Exit(1)
 }
