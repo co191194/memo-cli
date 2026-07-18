@@ -1,22 +1,209 @@
 package main
 
 import (
+	"errors"
 	"fmt"
-	"os"
+	"io"
 	"strconv"
 	"strings"
 	"time"
 )
 
-const path = "~/.memo/memos.json"
+type MemoCommand interface {
+	AddMemo(stdout io.Writer, stderr io.Writer, args []string) int
+	ListMemos(stdout io.Writer, stderr io.Writer, args []string) int
+	ShowMemo(stdout io.Writer, stderr io.Writer, args []string) int
+	SearchMemos(stdout io.Writer, stderr io.Writer, args []string) int
+	DeleteMemo(stdout io.Writer, stderr io.Writer, args []string) int
+}
 
-func AddMemo(title string) {
+type TimeProvider interface {
+	Now() time.Time
+}
 
-	memos, err := LoadMemos(path)
-	if err != nil {
-		printOpenFileError(err)
+type RealTimeProvider struct {
+}
+
+func (rtp *RealTimeProvider) Now() time.Time {
+	return time.Now()
+}
+
+type MemoCommandImpl struct {
+	Command      MemoCommand
+	MemoPath     string
+	TimeProvider TimeProvider
+	MemoOperator MemoOperator
+}
+
+func (cmd *MemoCommandImpl) AddMemo(stdout io.Writer, stderr io.Writer, args []string) int {
+	if len(args) != 1 {
+		fmt.Fprintln(stderr, "Usage:")
+		fmt.Fprintln(stderr, "  memo add <title>")
+		return 1
 	}
 
+	if isEmpty(args[0]) {
+		printEmptyError(stderr, "タイトル")
+		return 1
+	}
+
+	memos, err := cmd.MemoOperator.LoadMemos(cmd.MemoPath)
+	if err != nil {
+		printOpenFileError(stderr, err)
+		return 1
+	}
+
+	now := cmd.TimeProvider.Now()
+
+	addedMemo := createMemo(memos, args[0], now)
+
+	memos = append(memos, addedMemo)
+
+	if err := cmd.MemoOperator.SaveMemos(cmd.MemoPath, memos); err != nil {
+		fmt.Fprintln(stderr, "メモの保存に失敗しました", err)
+		return 1
+	}
+
+	return 0
+}
+
+func (cmd *MemoCommandImpl) ListMemos(stdout io.Writer, stderr io.Writer, args []string) int {
+	if len(args) != 0 {
+		fmt.Fprintln(stderr, "Usage:")
+		fmt.Fprintln(stderr, "  memo list")
+		return 1
+	}
+
+	memos, err := cmd.MemoOperator.LoadMemos(cmd.MemoPath)
+	if err != nil {
+		printOpenFileError(stderr, err)
+		return 1
+	}
+
+	if len(memos) == 0 {
+		fmt.Fprintln(stdout, "No memos found.")
+	} else {
+		for _, memo := range memos {
+			printMemoForList(stdout, memo)
+		}
+	}
+	return 0
+}
+
+const DATE_TIME_FORMAT = "2006-01-02 15:04"
+
+func (cmd *MemoCommandImpl) ShowMemo(stdout io.Writer, stderr io.Writer, args []string) int {
+	if len(args) != 1 {
+		fmt.Fprintln(stderr, "Usage:")
+		fmt.Fprintln(stderr, "  memo show <id>")
+		return 1
+	}
+
+	id, err := resolveId(args[0])
+	if err != nil {
+		fmt.Fprintln(stderr, err.Error())
+		return 1
+	}
+
+	memos, err := cmd.MemoOperator.LoadMemos(cmd.MemoPath)
+	if err != nil {
+		printOpenFileError(stderr, err)
+		return 1
+	}
+
+	memo, err := findById(memos, id)
+	if err != nil {
+		fmt.Fprintln(stderr, err.Error())
+		return 1
+	}
+
+	fmt.Fprintln(stdout, "# "+memo.Title)
+	fmt.Fprintln(stdout)
+	fmt.Fprintln(stdout, "ID: "+strconv.Itoa(memo.ID))
+	fmt.Fprintln(stdout, "Created: "+memo.CreatedAt.Format(DATE_TIME_FORMAT))
+	fmt.Fprintln(stdout, "Updated: "+memo.UpdatedAt.Format(DATE_TIME_FORMAT))
+	fmt.Fprintln(stdout)
+	fmt.Fprintln(stdout, memo.Body)
+	return 0
+}
+
+func (cmd *MemoCommandImpl) SearchMemos(stdout io.Writer, stderr io.Writer, args []string) int {
+	if len(args) != 1 {
+		fmt.Fprintln(stderr, "Usage:")
+		fmt.Fprintln(stderr, "  memo search <keyword>")
+		return 1
+	}
+	keyword := args[0]
+	if isEmpty(keyword) {
+		printEmptyError(stderr, "キーワード")
+		return 1
+	}
+
+	memos, err := cmd.MemoOperator.LoadMemos(cmd.MemoPath)
+	if err != nil {
+		printOpenFileError(stderr, err)
+		return 1
+	}
+
+	filteredMemos, err := filterMemos(memos, keyword)
+	if err != nil {
+		fmt.Fprintln(stderr, err.Error())
+		return 1
+	}
+
+	for _, memo := range filteredMemos {
+		printMemoForList(stdout, memo)
+	}
+
+	return 0
+}
+
+func (cmd *MemoCommandImpl) DeleteMemo(stdout io.Writer, stderr io.Writer, args []string) int {
+	if len(args) != 1 {
+		fmt.Fprintln(stderr, "Usage:")
+		fmt.Fprintln(stderr, "  memo delete <id>")
+		return 1
+	}
+	var id int
+	id, err := resolveId(args[0])
+	if err != nil {
+		fmt.Fprintln(stderr, err.Error())
+		return 1
+	}
+
+	memos, err := cmd.MemoOperator.LoadMemos(cmd.MemoPath)
+	if err != nil {
+		printOpenFileError(stderr, err)
+		return 1
+	}
+
+	newMemos, err := buildDeletedMemos(memos, id)
+
+	if err != nil {
+		fmt.Fprintln(stderr, err.Error())
+		return 1
+	}
+
+	if err := cmd.MemoOperator.SaveMemos(cmd.MemoPath, newMemos); err != nil {
+		fmt.Fprintln(stderr, "メモを削除できませんでした", err)
+		return 1
+	}
+	return 0
+}
+
+func printOpenFileError(stderr io.Writer, err error) {
+	fmt.Fprintln(stderr, "メモを開くことができませんでした", err)
+}
+
+func printMemoForList(stdout io.Writer, memo Memo) {
+	fmt.Fprintf(stdout, "%d %s\t%s\n", memo.ID, memo.Title, memo.CreatedAt.Format("2006-01-02"))
+}
+
+func newNotFoundError(id int) error {
+	return errors.New("memo not found: " + strconv.Itoa(id))
+}
+
+func createMemo(memos []Memo, title string, now time.Time) Memo {
 	var id int
 	if len(memos) > 0 {
 		maxId := 0
@@ -31,121 +218,71 @@ func AddMemo(title string) {
 		id = 1
 	}
 
-	now := time.Now()
-
-	addedMemo := Memo{
+	return Memo{
 		ID:        id,
 		Title:     title,
 		Body:      "",
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
-
-	memos = append(memos, addedMemo)
-
-	if err := SaveMemos(path, memos); err != nil {
-		fmt.Println("メモの保存に失敗しました", err)
-		os.Exit(1)
-	}
 }
 
-func ListMemos() {
-	memos, err := LoadMemos(path)
-	if err != nil {
-		printOpenFileError(err)
-	}
-
-	if len(memos) == 0 {
-		fmt.Println("No memos found.")
-	} else {
-		for _, memo := range memos {
-			printMemoForList(memo)
-		}
-	}
-}
-
-const DATE_TIME_FORMAT = "2006-01-02 15:04"
-
-func ShowMemo(id int) {
-	memos, err := LoadMemos(path)
-	if err != nil {
-		printOpenFileError(err)
-	}
+func findById(memos []Memo, id int) (Memo, error) {
 
 	for _, memo := range memos {
 		if memo.ID == id {
-			fmt.Println("# " + memo.Title)
-			fmt.Println()
-			fmt.Println("ID: " + strconv.Itoa(memo.ID))
-			fmt.Println("Created: " + memo.CreatedAt.Format(DATE_TIME_FORMAT))
-			fmt.Println("Updated: " + memo.UpdatedAt.Format(DATE_TIME_FORMAT))
-			fmt.Println()
-			fmt.Println(memo.Body)
-			return
+			return memo, nil
 		}
 	}
-	printNotFoundMemo(id)
-	os.Exit(1)
+
+	return Memo{}, newNotFoundError(id)
 }
 
-func SearchMemos(keyword string) {
-	memos, err := LoadMemos(path)
-	if err != nil {
-		printOpenFileError(err)
-	}
-
-	countHitMemos := 0
+func filterMemos(memos []Memo, keyword string) ([]Memo, error) {
+	filteredMemos := []Memo{}
 
 	for _, memo := range memos {
 		if strings.Contains(memo.Title, keyword) || strings.Contains(memo.Body, keyword) {
-			printMemoForList(memo)
-			countHitMemos += 1
+			filteredMemos = append(filteredMemos, memo)
 		}
 	}
 
-	if countHitMemos == 0 {
-		fmt.Println("No matching memos found.")
-		os.Exit(1)
+	if len(filteredMemos) == 0 {
+		return nil, errors.New("No matching memos found.")
 	}
+
+	return filteredMemos, nil
 }
 
-func DeleteMemo(id int) {
-	memos, err := LoadMemos(path)
-	if err != nil {
-		printOpenFileError(err)
-	}
+func buildDeletedMemos(memos []Memo, id int) ([]Memo, error) {
 
-	newMemos := []Memo{}
-	existsMemo := false
+	deletedMemos := []Memo{}
 
 	for _, memo := range memos {
 		if memo.ID != id {
-			newMemos = append(newMemos, memo)
-		} else {
-			existsMemo = true
+			deletedMemos = append(deletedMemos, memo)
 		}
 	}
 
-	if !existsMemo {
-		printNotFoundMemo(id)
-		os.Exit(1)
+	if len(deletedMemos) == len(memos) {
+		return nil, newNotFoundError(id)
 	}
 
-	if err := SaveMemos(path, newMemos); err != nil {
-		fmt.Println("メモを削除できませんでした", err)
-		os.Exit(1)
+	return deletedMemos, nil
+}
+
+func printEmptyError(stderr io.Writer, name string) {
+	fmt.Fprintln(stderr, name+"を入力してください")
+}
+
+func resolveId(id string) (int, error) {
+	resolveId, err := strconv.Atoi(id)
+	if err != nil {
+		return -1, errors.New("idは数値を入力してください: " + id)
 	}
+	return resolveId, nil
 }
 
-func printOpenFileError(err error) {
-	fmt.Println("メモを開くことができませんでした", err)
-	os.Exit(1)
-}
-
-func printMemoForList(memo Memo) {
-	fmt.Printf("%d %s\t%s\n", memo.ID, memo.Title, memo.CreatedAt.Format("2006-01-02"))
-}
-
-func printNotFoundMemo(id int) {
-	fmt.Printf("memo not found: %d\n", id)
+func isEmpty(str string) bool {
+	return strings.TrimSpace(str) == ""
 }
