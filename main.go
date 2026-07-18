@@ -2,96 +2,70 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
-	"strconv"
-	"strings"
 )
 
 func main() {
+	app := App{
+		Command: &MemoCommandImpl{
+			MemoPath:     "~/.memo/memos.json",
+			TimeProvider: &RealTimeProvider{},
+			MemoOperator: &MemoOperatorImpl{},
+		},
+	}
+	exitCode := app.run(
+		os.Stdout,
+		os.Stderr,
+		os.Args[1:],
+	)
 
-	if len(os.Args) < 2 {
-		printHelp()
-		os.Exit(1)
+	os.Exit(exitCode)
+}
+
+type App struct {
+	Command MemoCommand
+}
+
+func (app *App) run(
+	stdout io.Writer,
+	stderr io.Writer,
+	args []string,
+) int {
+	if len(args) < 1 {
+		printHelp(stderr)
+		return 1
 	}
 
-	switch os.Args[1] {
+	var exitCode int
+
+	switch args[0] {
 	case "add":
-		if len(os.Args) == 2 || isEmpty(os.Args[2]) {
-			printEmptyError("タイトル")
-			os.Exit(1)
-		}
-		if len(os.Args) != 3 {
-			fmt.Println("Usage:")
-			fmt.Println("  memo add <title>")
-			os.Exit(1)
-		}
-		AddMemo(os.Args[2])
+		exitCode = app.Command.AddMemo(stdout, stderr, args[1:])
 	case "list":
-		if len(os.Args) != 2 {
-			fmt.Println("Usage:")
-			fmt.Println("  memo list")
-			os.Exit(1)
-		}
-		ListMemos()
+		exitCode = app.Command.ListMemos(stdout, stderr, args[1:])
 	case "show":
-		if len(os.Args) != 3 {
-			fmt.Println("Usage:")
-			fmt.Println("  memo show <id>")
-			os.Exit(1)
-		}
-		id := resolveId(os.Args[2])
-		ShowMemo(id)
+		exitCode = app.Command.ShowMemo(stdout, stderr, args[1:])
 	case "search":
-		if len(os.Args) != 3 {
-			fmt.Println("Usage:")
-			fmt.Println("  memo search <keyword>")
-			os.Exit(1)
-		}
-		keyword := os.Args[2]
-		if isEmpty(keyword) {
-			printEmptyError("キーワード")
-		}
-		SearchMemos(os.Args[2])
+		exitCode = app.Command.SearchMemos(stdout, stderr, args[1:])
 	case "delete":
-		if len(os.Args) != 3 {
-			fmt.Println("Usage:")
-			fmt.Println("  memo delete <id>")
-			os.Exit(1)
-		}
-		id := resolveId(os.Args[2])
-		DeleteMemo(id)
+		exitCode = app.Command.DeleteMemo(stdout, stderr, args[1:])
 	default:
-		printHelp()
-		os.Exit(1)
+		printHelp(stderr)
+		return 1
 	}
+
+	return exitCode
 }
 
-func printHelp() {
-	fmt.Println("Usage:")
-	fmt.Println("  memo <command> [arguments]")
-	fmt.Println()
-	fmt.Println("Commands:")
-	fmt.Println("  add     Add a new memo")
-	fmt.Println("  list    List memos")
-	fmt.Println("  show    Show a memo")
-	fmt.Println("  search  Search memos")
-	fmt.Println("  delete  delete a memo")
-}
-
-func isEmpty(str string) bool {
-	return strings.TrimSpace(str) == ""
-}
-
-func printEmptyError(name string) {
-	fmt.Println(name + "を入力してください")
-	os.Exit(1)
-}
-
-func resolveId(id string) int {
-	resolveId, err := strconv.Atoi(id)
-	if err != nil {
-		fmt.Println("idは数値を入力してください: " + id)
-		os.Exit(1)
-	}
-	return resolveId
+func printHelp(stderr io.Writer) {
+	fmt.Fprintln(stderr, "Usage:")
+	fmt.Fprintln(stderr, "  memo <command> [arguments]")
+	fmt.Fprintln(stderr)
+	fmt.Fprintln(stderr, "Commands:")
+	fmt.Fprintln(stderr, "  add     Add a new memo")
+	fmt.Fprintln(stderr, "  list    List memos")
+	fmt.Fprintln(stderr, "  show    Show a memo")
+	fmt.Fprintln(stderr, "  search  Search memos")
+	fmt.Fprintln(stderr, "  delete  delete a memo")
 }

@@ -8,6 +8,13 @@ import (
 	"time"
 )
 
+type MemoOperator interface {
+	LoadMemos(path string) ([]Memo, error)
+	SaveMemos(path string, memos []Memo) error
+}
+
+type MemoOperatorImpl struct{}
+
 type Memo struct {
 	ID        int       `json:"id"`
 	Title     string    `json:"title"`
@@ -16,7 +23,7 @@ type Memo struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-func LoadMemos(path string) ([]Memo, error) {
+func (mo *MemoOperatorImpl) LoadMemos(path string) ([]Memo, error) {
 
 	path, err := expandPath(path)
 	if err != nil {
@@ -40,7 +47,7 @@ func LoadMemos(path string) ([]Memo, error) {
 	return memos, nil
 }
 
-func SaveMemos(path string, memos []Memo) error {
+func (mo *MemoOperatorImpl) SaveMemos(path string, memos []Memo) error {
 
 	path, err := expandPath(path)
 	if err != nil {
