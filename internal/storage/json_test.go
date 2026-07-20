@@ -1,11 +1,17 @@
-package main
+package storage_test
 
 import (
 	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/co191194/memo-cli/internal/memo"
+	"github.com/co191194/memo-cli/internal/storage"
 )
+
+type Memo = memo.Memo
+type StorageOperatorImpl = storage.StorageOperatorImpl
 
 func TestSaveAndLoadMemos(t *testing.T) {
 	filePath := filepath.Join(t.TempDir(), "memos.json")
@@ -21,7 +27,7 @@ func TestSaveAndLoadMemos(t *testing.T) {
 		},
 	}
 
-	mo := MemoOperatorImpl{}
+	mo := StorageOperatorImpl{}
 
 	if err := mo.SaveMemos(filePath, expected); err != nil {
 		t.Fatalf("SaveMemos() error = %v", err)
@@ -40,7 +46,7 @@ func TestSaveAndLoadMemos(t *testing.T) {
 func TestLoadMemos_FileDoesNotExist(t *testing.T) {
 	filePath := filepath.Join(t.TempDir(), "not-exist.json")
 
-	mo := MemoOperatorImpl{}
+	mo := StorageOperatorImpl{}
 
 	actual, err := mo.LoadMemos(filePath)
 	if err != nil {

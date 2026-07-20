@@ -1,29 +1,19 @@
-package main
+package storage
 
 import (
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
+
+	"github.com/co191194/memo-cli/internal/memo"
 )
 
-type MemoOperator interface {
-	LoadMemos(path string) ([]Memo, error)
-	SaveMemos(path string, memos []Memo) error
-}
+type StorageOperatorImpl struct{}
 
-type MemoOperatorImpl struct{}
+type Memo = memo.Memo
 
-type Memo struct {
-	ID        int       `json:"id"`
-	Title     string    `json:"title"`
-	Body      string    `json:"body"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-}
-
-func (mo *MemoOperatorImpl) LoadMemos(path string) ([]Memo, error) {
+func (mo *StorageOperatorImpl) LoadMemos(path string) ([]Memo, error) {
 
 	path, err := expandPath(path)
 	if err != nil {
@@ -47,7 +37,7 @@ func (mo *MemoOperatorImpl) LoadMemos(path string) ([]Memo, error) {
 	return memos, nil
 }
 
-func (mo *MemoOperatorImpl) SaveMemos(path string, memos []Memo) error {
+func (mo *StorageOperatorImpl) SaveMemos(path string, memos []Memo) error {
 
 	path, err := expandPath(path)
 	if err != nil {

@@ -1,4 +1,4 @@
-package main
+package cli_test
 
 import (
 	"bytes"
@@ -6,13 +6,17 @@ import (
 	"io"
 	"strings"
 	"testing"
+
+	"github.com/co191194/memo-cli/internal/cli"
 )
 
 type fakeMemoCommand struct {
 	MemoPath     string
-	TimeProvider TimeProvider
-	Command      MemoCommand
+	TimeProvider cli.TimeProvider
+	Command      cli.MemoCommand
 }
+
+type App = cli.App
 
 func (cmd *fakeMemoCommand) AddMemo(stdout io.Writer, stderr io.Writer, args []string) int {
 	fmt.Fprint(stdout, "Called AddMemo()")
@@ -85,7 +89,7 @@ func TestRun(t *testing.T) {
 		t.Run(tc.testName, func(t *testing.T) {
 			var stdout bytes.Buffer
 			var stderr bytes.Buffer
-			if exitCode := app.run(&stdout, &stderr, tc.args); exitCode != 0 {
+			if exitCode := app.Run(&stdout, &stderr, tc.args); exitCode != 0 {
 				t.Fatalf("actual exitCode = %d, expected = 0", exitCode)
 			}
 
@@ -129,7 +133,7 @@ func TestRun_PrintHelp(t *testing.T) {
 
 			var stdout bytes.Buffer
 			var stderr bytes.Buffer
-			if exitCode := app.run(&stdout, &stderr, tc.args); exitCode != 1 {
+			if exitCode := app.Run(&stdout, &stderr, tc.args); exitCode != 1 {
 				t.Fatalf("actual exitCode = %d, expected = 1", exitCode)
 			}
 
@@ -163,7 +167,7 @@ func TestRun_FailedCommand(t *testing.T) {
 		t.Run(tc.testName, func(t *testing.T) {
 			var stdout bytes.Buffer
 			var stderr bytes.Buffer
-			if exitCode := app.run(&stdout, &stderr, tc.args); exitCode != 1 {
+			if exitCode := app.Run(&stdout, &stderr, tc.args); exitCode != 1 {
 				t.Fatalf("actual exitCode = %d, expected = 1", exitCode)
 			}
 
