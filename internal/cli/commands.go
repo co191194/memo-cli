@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"errors"
@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/co191194/memo-cli/internal/memo"
 )
 
 type MemoCommand interface {
@@ -28,11 +30,17 @@ func (rtp *RealTimeProvider) Now() time.Time {
 	return time.Now()
 }
 
+type Memo = memo.Memo
+
+type StorageOperator interface {
+	LoadMemos(path string) ([]Memo, error)
+	SaveMemos(path string, memos []Memo) error
+}
+
 type MemoCommandImpl struct {
-	Command      MemoCommand
-	MemoPath     string
-	TimeProvider TimeProvider
-	MemoOperator MemoOperator
+	MemoPath        string
+	TimeProvider    TimeProvider
+	StorageOperator StorageOperator
 }
 
 func (cmd *MemoCommandImpl) AddMemo(stdout io.Writer, stderr io.Writer, args []string) int {
@@ -47,7 +55,7 @@ func (cmd *MemoCommandImpl) AddMemo(stdout io.Writer, stderr io.Writer, args []s
 		return 1
 	}
 
-	memos, err := cmd.MemoOperator.LoadMemos(cmd.MemoPath)
+	memos, err := cmd.StorageOperator.LoadMemos(cmd.MemoPath)
 	if err != nil {
 		printOpenFileError(stderr, err)
 		return 1
@@ -55,11 +63,11 @@ func (cmd *MemoCommandImpl) AddMemo(stdout io.Writer, stderr io.Writer, args []s
 
 	now := cmd.TimeProvider.Now()
 
-	addedMemo := createMemo(memos, args[0], now)
+	addedMemo := memo.CreateMemo(memos, args[0], now)
 
 	memos = append(memos, addedMemo)
 
-	if err := cmd.MemoOperator.SaveMemos(cmd.MemoPath, memos); err != nil {
+	if err := cmd.StorageOperator.SaveMemos(cmd.MemoPath, memos); err != nil {
 		fmt.Fprintln(stderr, "メモの保存に失敗しました", err)
 		return 1
 	}
@@ -74,7 +82,7 @@ func (cmd *MemoCommandImpl) ListMemos(stdout io.Writer, stderr io.Writer, args [
 		return 1
 	}
 
-	memos, err := cmd.MemoOperator.LoadMemos(cmd.MemoPath)
+	memos, err := cmd.StorageOperator.LoadMemos(cmd.MemoPath)
 	if err != nil {
 		printOpenFileError(stderr, err)
 		return 1
@@ -105,13 +113,13 @@ func (cmd *MemoCommandImpl) ShowMemo(stdout io.Writer, stderr io.Writer, args []
 		return 1
 	}
 
-	memos, err := cmd.MemoOperator.LoadMemos(cmd.MemoPath)
+	memos, err := cmd.StorageOperator.LoadMemos(cmd.MemoPath)
 	if err != nil {
 		printOpenFileError(stderr, err)
 		return 1
 	}
 
-	memo, err := findById(memos, id)
+	memo, err := memo.FindById(memos, id)
 	if err != nil {
 		fmt.Fprintln(stderr, err.Error())
 		return 1
@@ -139,13 +147,13 @@ func (cmd *MemoCommandImpl) SearchMemos(stdout io.Writer, stderr io.Writer, args
 		return 1
 	}
 
-	memos, err := cmd.MemoOperator.LoadMemos(cmd.MemoPath)
+	memos, err := cmd.StorageOperator.LoadMemos(cmd.MemoPath)
 	if err != nil {
 		printOpenFileError(stderr, err)
 		return 1
 	}
 
-	filteredMemos, err := filterMemos(memos, keyword)
+	filteredMemos, err := memo.FilterMemos(memos, keyword)
 	if err != nil {
 		fmt.Fprintln(stderr, err.Error())
 		return 1
@@ -171,20 +179,20 @@ func (cmd *MemoCommandImpl) DeleteMemo(stdout io.Writer, stderr io.Writer, args 
 		return 1
 	}
 
-	memos, err := cmd.MemoOperator.LoadMemos(cmd.MemoPath)
+	memos, err := cmd.StorageOperator.LoadMemos(cmd.MemoPath)
 	if err != nil {
 		printOpenFileError(stderr, err)
 		return 1
 	}
 
-	newMemos, err := buildDeletedMemos(memos, id)
+	newMemos, err := memo.BuildDeletedMemos(memos, id)
 
 	if err != nil {
 		fmt.Fprintln(stderr, err.Error())
 		return 1
 	}
 
-	if err := cmd.MemoOperator.SaveMemos(cmd.MemoPath, newMemos); err != nil {
+	if err := cmd.StorageOperator.SaveMemos(cmd.MemoPath, newMemos); err != nil {
 		fmt.Fprintln(stderr, "メモを削除できませんでした", err)
 		return 1
 	}
@@ -197,78 +205,6 @@ func printOpenFileError(stderr io.Writer, err error) {
 
 func printMemoForList(stdout io.Writer, memo Memo) {
 	fmt.Fprintf(stdout, "%d %s\t%s\n", memo.ID, memo.Title, memo.CreatedAt.Format("2006-01-02"))
-}
-
-func newNotFoundError(id int) error {
-	return errors.New("memo not found: " + strconv.Itoa(id))
-}
-
-func createMemo(memos []Memo, title string, now time.Time) Memo {
-	var id int
-	if len(memos) > 0 {
-		maxId := 0
-		// JSONは順序を保証しないので全体を走査して最大IDを取得する
-		for _, memo := range memos {
-			if maxId < memo.ID {
-				maxId = memo.ID
-			}
-		}
-		id = maxId + 1
-	} else {
-		id = 1
-	}
-
-	return Memo{
-		ID:        id,
-		Title:     title,
-		Body:      "",
-		CreatedAt: now,
-		UpdatedAt: now,
-	}
-}
-
-func findById(memos []Memo, id int) (Memo, error) {
-
-	for _, memo := range memos {
-		if memo.ID == id {
-			return memo, nil
-		}
-	}
-
-	return Memo{}, newNotFoundError(id)
-}
-
-func filterMemos(memos []Memo, keyword string) ([]Memo, error) {
-	filteredMemos := []Memo{}
-
-	for _, memo := range memos {
-		if strings.Contains(memo.Title, keyword) || strings.Contains(memo.Body, keyword) {
-			filteredMemos = append(filteredMemos, memo)
-		}
-	}
-
-	if len(filteredMemos) == 0 {
-		return nil, errors.New("No matching memos found.")
-	}
-
-	return filteredMemos, nil
-}
-
-func buildDeletedMemos(memos []Memo, id int) ([]Memo, error) {
-
-	deletedMemos := []Memo{}
-
-	for _, memo := range memos {
-		if memo.ID != id {
-			deletedMemos = append(deletedMemos, memo)
-		}
-	}
-
-	if len(deletedMemos) == len(memos) {
-		return nil, newNotFoundError(id)
-	}
-
-	return deletedMemos, nil
 }
 
 func printEmptyError(stderr io.Writer, name string) {

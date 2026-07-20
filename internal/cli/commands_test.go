@@ -1,4 +1,4 @@
-package main
+package cli_test
 
 import (
 	"bytes"
@@ -6,152 +6,11 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/co191194/memo-cli/internal/cli"
+	"github.com/co191194/memo-cli/internal/memo"
+	"github.com/co191194/memo-cli/internal/storage"
 )
-
-func TestCreateMemo(t *testing.T) {
-	now := time.Date(2026, 7, 10, 10, 0, 0, 0, time.UTC)
-
-	memos := []Memo{
-		{ID: 4, Title: "Exist1"},
-		{ID: 1, Title: "Exist2"},
-	}
-
-	actual := createMemo(memos, "New Memo", now)
-
-	if actual.ID != 5 {
-		t.Errorf("ID = %d, expected = 5", actual.ID)
-	}
-
-	if actual.Title != "New Memo" {
-		t.Errorf("Title = %q, expected = %q", actual.Title, "New Memo")
-	}
-
-	if !actual.CreatedAt.Equal(now) {
-		t.Errorf("CreatedAt = %v, expected = %v", actual.CreatedAt, now)
-	}
-
-	if !actual.UpdatedAt.Equal(now) {
-		t.Errorf("UpdatedAt = %v, expected = %v", actual.UpdatedAt, now)
-	}
-}
-
-func TestFindById(t *testing.T) {
-	memos := []Memo{
-		{ID: 1, Title: "Other"},
-		{ID: 3, Title: "Other"},
-		{ID: 2, Title: "Target"},
-		{ID: 4, Title: "Other"},
-	}
-
-	actual, err := findById(memos, 2)
-	if err != nil {
-		t.Fatalf("findById() err = %v", err)
-	}
-
-	if actual.ID != 2 {
-		t.Errorf("ID = %d, expected = 2", actual.ID)
-	}
-
-	if actual.Title != "Target" {
-		t.Errorf("Title = %q, expected = %q", actual.Title, "Target")
-	}
-}
-
-func TestFindById_NotFound(t *testing.T) {
-	memos := []Memo{
-		{ID: 1, Title: "Other"},
-		{ID: 3, Title: "Other"},
-	}
-
-	_, actual := findById(memos, 2)
-	if actual == nil {
-		t.Fatalf("findById any match")
-	}
-
-	assertEqualsMessage(t, actual.Error(), "memo not found: 2")
-}
-
-func TestFilterMemos(t *testing.T) {
-	memos := []Memo{
-		{ID: 1, Title: "Other Title1", Body: "Other Body1"},
-		{ID: 2, Title: "Target Title2", Body: "Body2"},
-		{ID: 3, Title: "Title3", Body: "Body3 Target"},
-		{ID: 4, Title: "Other Title4", Body: "Other Body4"},
-		{ID: 5, Title: "Title5 Target Middle", Body: "Body5"},
-		{ID: 6, Title: "Other Title6", Body: "Other Body6"},
-	}
-
-	actual, err := filterMemos(memos, "Target")
-	if err != nil {
-		t.Fatalf("filterMemos() err = %v", err)
-	}
-
-	if len(actual) != 3 {
-		t.Fatalf("actual len = %d, expected = 3", len(actual))
-	}
-	if actual[0].ID != 2 {
-		t.Errorf("actual[0].ID = %d, expected = 2", actual[0].ID)
-	}
-	if actual[1].ID != 3 {
-		t.Errorf("actual[1].ID = %d, expected = 3", actual[1].ID)
-	}
-	if actual[2].ID != 5 {
-		t.Errorf("actual[2].ID = %d, expected = 5", actual[2].ID)
-	}
-}
-
-func TestFilterMemos_NotMatch(t *testing.T) {
-	memos := []Memo{
-		{ID: 1, Title: "Other Title1", Body: "Other Body1"},
-		{ID: 6, Title: "Other Title6", Body: "Other Body6"},
-	}
-
-	_, actual := filterMemos(memos, "Target")
-	if actual == nil {
-		t.Fatalf("filterMemos any match")
-	}
-
-	assertEqualsMessage(t, actual.Error(), "No matching memos found.")
-}
-
-func TestBuildDeletedMemos(t *testing.T) {
-	memos := []Memo{
-		{ID: 6, Title: "Other1"},
-		{ID: 3, Title: "Target"},
-		{ID: 1, Title: "Other2"},
-	}
-
-	actual, err := buildDeletedMemos(memos, 3)
-	if err != nil {
-		t.Fatalf("buildDeletedMemos() err = %v", err)
-	}
-
-	if len(actual) != 2 {
-		t.Fatalf("actual.len = %d, expected = 2", len(actual))
-	}
-
-	if actual[0].ID != 6 {
-		t.Errorf("actual[0].ID = %d, expected = 6", actual[0].ID)
-	}
-
-	if actual[1].ID != 1 {
-		t.Errorf("actual[1].ID = %d, expected = 1", actual[1].ID)
-	}
-}
-
-func TestBuildDeletedMemos_NotFountMemo(t *testing.T) {
-	memos := []Memo{
-		{ID: 6, Title: "Other1"},
-		{ID: 1, Title: "Other2"},
-	}
-
-	_, actual := buildDeletedMemos(memos, 3)
-	if actual == nil {
-		t.Fatalf("buildDeletedMemos() any deleted memo")
-	}
-
-	assertEqualsMessage(t, actual.Error(), "memo not found: 3")
-}
 
 type fakeTimeProvider struct {
 }
@@ -159,6 +18,10 @@ type fakeTimeProvider struct {
 func (ftp *fakeTimeProvider) Now() time.Time {
 	return time.Date(2026, 7, 14, 10, 0, 0, 0, time.Local)
 }
+
+type Memo = memo.Memo
+type MemoCommandImpl = cli.MemoCommandImpl
+type RealTimeProvider = cli.RealTimeProvider
 
 func TestAddMemo(t *testing.T) {
 	t.Run("バリデーションエラー", func(t *testing.T) {
@@ -209,9 +72,9 @@ func TestAddMemo(t *testing.T) {
 	t.Run("メモの保存に失敗する場合", func(t *testing.T) {
 
 		cmd := MemoCommandImpl{
-			MemoPath:     t.TempDir(),
-			TimeProvider: &RealTimeProvider{},
-			MemoOperator: &fakeFailSaveMemoOperator{},
+			MemoPath:        t.TempDir(),
+			TimeProvider:    &RealTimeProvider{},
+			StorageOperator: &fakeFailSaveMemoOperator{},
 		}
 
 		var stdout bytes.Buffer
@@ -261,7 +124,7 @@ func TestListMemos(t *testing.T) {
 	})
 }
 
-var realMemoOperator = MemoOperatorImpl{}
+var realMemoOperator = storage.StorageOperatorImpl{}
 
 func TestAddMemoAndListMemo(t *testing.T) {
 
@@ -272,9 +135,9 @@ func TestAddMemoAndListMemo(t *testing.T) {
 		var stderr1 bytes.Buffer
 
 		cmd := MemoCommandImpl{
-			MemoPath:     filePath,
-			TimeProvider: &fakeTimeProvider{},
-			MemoOperator: &realMemoOperator,
+			MemoPath:        filePath,
+			TimeProvider:    &fakeTimeProvider{},
+			StorageOperator: &realMemoOperator,
 		}
 
 		assertEqualsExitCode(t, cmd.ListMemos(&stdout1, &stderr1, []string{}), 0)
@@ -294,9 +157,9 @@ func TestAddMemoAndListMemo(t *testing.T) {
 		filePath := filepath.Join(t.TempDir(), "memos.json")
 
 		cmd := MemoCommandImpl{
-			MemoPath:     filePath,
-			TimeProvider: &fakeTimeProvider{},
-			MemoOperator: &realMemoOperator,
+			MemoPath:        filePath,
+			TimeProvider:    &fakeTimeProvider{},
+			StorageOperator: &realMemoOperator,
 		}
 
 		existTime := time.Date(2026, 7, 1, 9, 30, 0, 0, time.Local)
@@ -349,9 +212,9 @@ func TestShowMemo(t *testing.T) {
 	}
 
 	cmd := MemoCommandImpl{
-		MemoPath:     filePath,
-		TimeProvider: &fakeTimeProvider{},
-		MemoOperator: &realMemoOperator,
+		MemoPath:        filePath,
+		TimeProvider:    &fakeTimeProvider{},
+		StorageOperator: &realMemoOperator,
 	}
 
 	t.Run("指定IDのメモが存在する場合", func(t *testing.T) {
@@ -429,9 +292,9 @@ func TestShowMemo(t *testing.T) {
 func TestSearch(t *testing.T) {
 
 	cmd := MemoCommandImpl{
-		MemoPath:     filepath.Join(t.TempDir(), "memos.json"),
-		TimeProvider: &fakeTimeProvider{},
-		MemoOperator: &realMemoOperator,
+		MemoPath:        filepath.Join(t.TempDir(), "memos.json"),
+		TimeProvider:    &fakeTimeProvider{},
+		StorageOperator: &realMemoOperator,
 	}
 
 	memos := []Memo{
@@ -565,9 +428,9 @@ func TestDeleteMemo(t *testing.T) {
 		var stderr bytes.Buffer
 
 		cmd := MemoCommandImpl{
-			MemoPath:     filePath,
-			TimeProvider: &fakeTimeProvider{},
-			MemoOperator: &realMemoOperator,
+			MemoPath:        filePath,
+			TimeProvider:    &fakeTimeProvider{},
+			StorageOperator: &realMemoOperator,
 		}
 
 		assertEqualsExitCode(t, cmd.DeleteMemo(&stdout, &stderr, []string{"2"}), 0)
@@ -607,9 +470,9 @@ func TestDeleteMemo(t *testing.T) {
 		var stderr bytes.Buffer
 
 		cmd := MemoCommandImpl{
-			MemoPath:     filePath,
-			TimeProvider: &fakeTimeProvider{},
-			MemoOperator: &realMemoOperator,
+			MemoPath:        filePath,
+			TimeProvider:    &fakeTimeProvider{},
+			StorageOperator: &realMemoOperator,
 		}
 
 		exitCode := cmd.DeleteMemo(&stdout, &stderr, []string{"2"})

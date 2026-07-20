@@ -180,8 +180,8 @@ go version
 ### リポジトリをクローンする
 
 ```bash
-git clone https://github.com/<your-name>/memo.git
-cd memo
+git clone https://github.com/<your-name>/memo-cli.git
+cd memo-cli
 ```
 
 ### モジュールを初期化する
@@ -189,7 +189,7 @@ cd memo
 新規作成時は以下を実行します。
 
 ```bash
-go mod init github.com/<your-name>/memo
+go mod init github.com/<your-name>/memo-cli
 ```
 
 既に `go.mod` が存在する場合、この手順は不要です。
@@ -197,7 +197,7 @@ go mod init github.com/<your-name>/memo
 ### ビルドする
 
 ```bash
-go build -o memo
+go build -o memo ./cmd/memo
 ```
 
 ### 実行する
@@ -213,15 +213,15 @@ go build -o memo
 ### Step 1: プロジェクトを作成する
 
 ```bash
-mkdir memo
-cd memo
-go mod init github.com/<your-name>/memo
+mkdir memo-cli
+cd memo-cli
+go mod init github.com/<your-name>/memo-cli
 ```
 
 最初のファイル構成:
 
 ```txt
-memo/
+memo-cli/
   go.mod
   main.go
   memo.go
@@ -349,7 +349,7 @@ go test ./...
 最初はシンプルな構成で実装します。
 
 ```txt
-memo/
+memo-cli/
   go.mod
   main.go
   memo.go
@@ -361,7 +361,7 @@ memo/
 コードが増えてきたら、以下のような構成にリファクタリングします。
 
 ```txt
-memo/
+memo-cli/
   go.mod
   cmd/
     memo/
