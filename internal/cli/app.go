@@ -29,6 +29,9 @@ func (app *App) Run(
 		exitCode = app.Command.SearchMemos(stdout, stderr, args[1:])
 	case "delete":
 		exitCode = app.Command.DeleteMemo(stdout, stderr, args[1:])
+	case "help", "-h", "--help":
+		PrintHelp(stdout)
+		exitCode = 0
 	default:
 		PrintHelp(stderr)
 		return 1

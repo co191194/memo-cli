@@ -144,6 +144,59 @@ func TestRun_PrintHelp(t *testing.T) {
 	}
 }
 
+func TestHelp(t *testing.T) {
+
+	testCases := []struct {
+		testName string
+		args     []string
+	}{
+		{
+			testName: "help",
+			args:     []string{"help"},
+		},
+		{
+			testName: "--help",
+			args:     []string{"--help"},
+		},
+		{
+			testName: "-h",
+			args:     []string{"-h"},
+		},
+	}
+
+	app := App{
+		Command: &fakeMemoCommand{},
+	}
+
+	expected := "" +
+		"Usage:\n" +
+		"  memo <command> [arguments]\n" +
+		"\n" +
+		"Commands:\n" +
+		"  add     Add a new memo\n" +
+		"  list    List memos\n" +
+		"  show    Show a memo\n" +
+		"  search  Search memos\n" +
+		"  delete  delete a memo\n"
+
+	for _, tc := range testCases {
+		t.Run(tc.testName, func(t *testing.T) {
+
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
+
+			if exitCode := app.Run(&stdout, &stderr, tc.args); exitCode != 0 {
+				t.Fatalf("actual exitCode = %d, expected = 0", exitCode)
+			}
+
+			if stdout.String() != expected {
+				t.Errorf("actual = %q, expected = %q", stdout.String(), expected)
+			}
+
+		})
+	}
+}
+
 func TestRun_FailedCommand(t *testing.T) {
 
 	app := App{
