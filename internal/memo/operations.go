@@ -11,7 +11,7 @@ func newNotFoundError(id int) error {
 	return errors.New("memo not found: " + strconv.Itoa(id))
 }
 
-func CreateMemo(memos []Memo, title string, now time.Time) Memo {
+func CreateMemo(memos []Memo, title string, body string, now time.Time) Memo {
 	var id int
 	if len(memos) > 0 {
 		maxId := 0
@@ -29,7 +29,7 @@ func CreateMemo(memos []Memo, title string, now time.Time) Memo {
 	return Memo{
 		ID:        id,
 		Title:     title,
-		Body:      "",
+		Body:      body,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}

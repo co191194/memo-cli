@@ -2,6 +2,7 @@ package cli
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"strconv"
@@ -43,16 +44,16 @@ type MemoCommandImpl struct {
 	StorageOperator StorageOperator
 }
 
-func (cmd *MemoCommandImpl) AddMemo(stdout io.Writer, stderr io.Writer, args []string) int {
-	if len(args) != 1 {
-		fmt.Fprintln(stderr, "Usage:")
-		fmt.Fprintln(stderr, "  memo add <title>")
-		return 1
-	}
+type addOptions struct {
+	Title string
+	Body  string
+}
 
-	if isEmpty(args[0]) {
-		printEmptyError(stderr, "タイトル")
-		return 1
+func (cmd *MemoCommandImpl) AddMemo(stdout io.Writer, stderr io.Writer, args []string) int {
+
+	options, err := parseAddArgs(stderr, args)
+	if err != nil {
+		return resolveParseErrorExitCode(err)
 	}
 
 	memos, err := cmd.StorageOperator.LoadMemos(cmd.MemoPath)
@@ -63,7 +64,7 @@ func (cmd *MemoCommandImpl) AddMemo(stdout io.Writer, stderr io.Writer, args []s
 
 	now := cmd.TimeProvider.Now()
 
-	addedMemo := memo.CreateMemo(memos, args[0], now)
+	addedMemo := memo.CreateMemo(memos, options.Title, options.Body, now)
 
 	memos = append(memos, addedMemo)
 
@@ -75,11 +76,41 @@ func (cmd *MemoCommandImpl) AddMemo(stdout io.Writer, stderr io.Writer, args []s
 	return 0
 }
 
+func parseAddArgs(stderr io.Writer, args []string) (addOptions, error) {
+	var options addOptions
+
+	fs := newCommandFlagSet(
+		"add",
+		"memo add <title> [--body <body>]",
+		stderr,
+	)
+
+	fs.StringVar(
+		&options.Body,
+		"body",
+		"",
+		"メモの本文",
+	)
+
+	positionals, err := parseCommandArgs(fs, args, 1)
+	if err != nil {
+		return addOptions{}, err
+	}
+
+	if isEmpty(positionals[0]) {
+		printEmptyError(stderr, "タイトル")
+		return addOptions{}, fmt.Errorf("title must be non-empty")
+	}
+
+	options.Title = positionals[0]
+
+	return options, nil
+}
+
 func (cmd *MemoCommandImpl) ListMemos(stdout io.Writer, stderr io.Writer, args []string) int {
-	if len(args) != 0 {
-		fmt.Fprintln(stderr, "Usage:")
-		fmt.Fprintln(stderr, "  memo list")
-		return 1
+	err := parseListArgs(stderr, args)
+	if err != nil {
+		return resolveParseErrorExitCode(err)
 	}
 
 	memos, err := cmd.StorageOperator.LoadMemos(cmd.MemoPath)
@@ -98,19 +129,24 @@ func (cmd *MemoCommandImpl) ListMemos(stdout io.Writer, stderr io.Writer, args [
 	return 0
 }
 
+func parseListArgs(stderr io.Writer, args []string) error {
+	fs := newCommandFlagSet("list", "memo list", stderr)
+
+	_, err := parseCommandArgs(fs, args, 0)
+
+	return err
+}
+
 const DATE_TIME_FORMAT = "2006-01-02 15:04"
 
-func (cmd *MemoCommandImpl) ShowMemo(stdout io.Writer, stderr io.Writer, args []string) int {
-	if len(args) != 1 {
-		fmt.Fprintln(stderr, "Usage:")
-		fmt.Fprintln(stderr, "  memo show <id>")
-		return 1
-	}
+type showOptions struct {
+	ID int
+}
 
-	id, err := resolveId(args[0])
+func (cmd *MemoCommandImpl) ShowMemo(stdout io.Writer, stderr io.Writer, args []string) int {
+	options, err := parseShowArgs(stderr, args)
 	if err != nil {
-		fmt.Fprintln(stderr, err.Error())
-		return 1
+		return resolveParseErrorExitCode(err)
 	}
 
 	memos, err := cmd.StorageOperator.LoadMemos(cmd.MemoPath)
@@ -119,7 +155,7 @@ func (cmd *MemoCommandImpl) ShowMemo(stdout io.Writer, stderr io.Writer, args []
 		return 1
 	}
 
-	memo, err := memo.FindById(memos, id)
+	memo, err := memo.FindById(memos, options.ID)
 	if err != nil {
 		fmt.Fprintln(stderr, err.Error())
 		return 1
@@ -135,16 +171,35 @@ func (cmd *MemoCommandImpl) ShowMemo(stdout io.Writer, stderr io.Writer, args []
 	return 0
 }
 
-func (cmd *MemoCommandImpl) SearchMemos(stdout io.Writer, stderr io.Writer, args []string) int {
-	if len(args) != 1 {
-		fmt.Fprintln(stderr, "Usage:")
-		fmt.Fprintln(stderr, "  memo search <keyword>")
-		return 1
+func parseShowArgs(stderr io.Writer, args []string) (showOptions, error) {
+	var options showOptions
+
+	fs := newCommandFlagSet("show", "memo show <id>", stderr)
+
+	positionals, err := parseCommandArgs(fs, args, 1)
+	if err != nil {
+		return showOptions{}, err
 	}
-	keyword := args[0]
-	if isEmpty(keyword) {
-		printEmptyError(stderr, "キーワード")
-		return 1
+
+	id, err := resolveId(positionals[0])
+	if err != nil {
+		fmt.Fprintln(stderr, err.Error())
+		return showOptions{}, err
+	}
+	options.ID = id
+
+	return options, nil
+}
+
+type searchOptions struct {
+	Keyword string
+}
+
+func (cmd *MemoCommandImpl) SearchMemos(stdout io.Writer, stderr io.Writer, args []string) int {
+
+	options, err := parseSearchArgs(stderr, args)
+	if err != nil {
+		return resolveParseErrorExitCode(err)
 	}
 
 	memos, err := cmd.StorageOperator.LoadMemos(cmd.MemoPath)
@@ -153,7 +208,7 @@ func (cmd *MemoCommandImpl) SearchMemos(stdout io.Writer, stderr io.Writer, args
 		return 1
 	}
 
-	filteredMemos, err := memo.FilterMemos(memos, keyword)
+	filteredMemos, err := memo.FilterMemos(memos, options.Keyword)
 	if err != nil {
 		fmt.Fprintln(stderr, err.Error())
 		return 1
@@ -166,17 +221,34 @@ func (cmd *MemoCommandImpl) SearchMemos(stdout io.Writer, stderr io.Writer, args
 	return 0
 }
 
-func (cmd *MemoCommandImpl) DeleteMemo(stdout io.Writer, stderr io.Writer, args []string) int {
-	if len(args) != 1 {
-		fmt.Fprintln(stderr, "Usage:")
-		fmt.Fprintln(stderr, "  memo delete <id>")
-		return 1
-	}
-	var id int
-	id, err := resolveId(args[0])
+func parseSearchArgs(stderr io.Writer, args []string) (searchOptions, error) {
+	var options searchOptions
+	fs := newCommandFlagSet("search", "memo search <keyword>", stderr)
+
+	positionals, err := parseCommandArgs(fs, args, 1)
 	if err != nil {
-		fmt.Fprintln(stderr, err.Error())
-		return 1
+		return searchOptions{}, err
+	}
+
+	if isEmpty(positionals[0]) {
+		printEmptyError(stderr, "キーワード")
+		return searchOptions{}, fmt.Errorf("keyword must be non-empty")
+	}
+
+	options.Keyword = positionals[0]
+
+	return options, nil
+}
+
+type deleteOptions struct {
+	ID int
+}
+
+func (cmd *MemoCommandImpl) DeleteMemo(stdout io.Writer, stderr io.Writer, args []string) int {
+
+	options, err := parseDeleteArgs(stderr, args)
+	if err != nil {
+		return resolveParseErrorExitCode(err)
 	}
 
 	memos, err := cmd.StorageOperator.LoadMemos(cmd.MemoPath)
@@ -185,7 +257,7 @@ func (cmd *MemoCommandImpl) DeleteMemo(stdout io.Writer, stderr io.Writer, args 
 		return 1
 	}
 
-	newMemos, err := memo.BuildDeletedMemos(memos, id)
+	newMemos, err := memo.BuildDeletedMemos(memos, options.ID)
 
 	if err != nil {
 		fmt.Fprintln(stderr, err.Error())
@@ -197,6 +269,27 @@ func (cmd *MemoCommandImpl) DeleteMemo(stdout io.Writer, stderr io.Writer, args 
 		return 1
 	}
 	return 0
+}
+
+func parseDeleteArgs(stderr io.Writer, args []string) (deleteOptions, error) {
+	var options deleteOptions
+
+	fs := newCommandFlagSet("delete", "memo delete <id>", stderr)
+
+	positionals, err := parseCommandArgs(fs, args, 1)
+	if err != nil {
+		return deleteOptions{}, err
+	}
+
+	id, err := resolveId(positionals[0])
+	if err != nil {
+		fmt.Fprintln(stderr, err.Error())
+		return deleteOptions{}, err
+	}
+
+	options.ID = id
+
+	return options, nil
 }
 
 func printOpenFileError(stderr io.Writer, err error) {
@@ -221,4 +314,11 @@ func resolveId(id string) (int, error) {
 
 func isEmpty(str string) bool {
 	return strings.TrimSpace(str) == ""
+}
+
+func resolveParseErrorExitCode(err error) int {
+	if errors.Is(err, flag.ErrHelp) {
+		return 0
+	}
+	return 1
 }

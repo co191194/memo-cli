@@ -17,7 +17,7 @@ func TestCreateMemo(t *testing.T) {
 		{ID: 1, Title: "Exist2"},
 	}
 
-	actual := memo.CreateMemo(memos, "New Memo", now)
+	actual := memo.CreateMemo(memos, "New Memo", "New Body", now)
 
 	if actual.ID != 5 {
 		t.Errorf("ID = %d, expected = 5", actual.ID)
@@ -25,6 +25,10 @@ func TestCreateMemo(t *testing.T) {
 
 	if actual.Title != "New Memo" {
 		t.Errorf("Title = %q, expected = %q", actual.Title, "New Memo")
+	}
+
+	if actual.Body != "New Body" {
+		t.Errorf("Body = %q, expected = %q", actual.Body, "New Body")
 	}
 
 	if !actual.CreatedAt.Equal(now) {

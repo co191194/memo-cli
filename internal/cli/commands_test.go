@@ -24,36 +24,90 @@ type MemoCommandImpl = cli.MemoCommandImpl
 type RealTimeProvider = cli.RealTimeProvider
 
 func TestAddMemo(t *testing.T) {
-	t.Run("バリデーションエラー", func(t *testing.T) {
+	t.Run("引数チェック", func(t *testing.T) {
 
 		testCases := []struct {
 			testName string
 			args     []string
 			expected string
+			exitCode int
 		}{
 			{
 				testName: "パラメーターが0個の場合",
 				args:     []string{},
 				expected: "" +
 					"Usage:\n" +
-					"  memo add <title>\n",
+					"  memo add <title> [--body <body>]\n" +
+					"  -body string\n" +
+					"    \tメモの本文\n",
+				exitCode: 1,
 			},
 			{
-				testName: "パラメーターが2個の場合",
+				testName: "引数が2個の場合",
 				args:     []string{"aaa", "bbb"},
 				expected: "" +
+					"引数が多すぎます\n" +
 					"Usage:\n" +
-					"  memo add <title>\n",
+					"  memo add <title> [--body <body>]\n" +
+					"  -body string\n" +
+					"    \tメモの本文\n",
+				exitCode: 1,
 			},
 			{
-				testName: "パラメーターが1個で空文字の場合",
+				testName: "引数が1個で空文字の場合",
 				args:     []string{""},
 				expected: "タイトルを入力してください\n",
+				exitCode: 1,
 			},
 			{
-				testName: "パラメーターが1個で空白のみの場合",
+				testName: "引数が1個で空白のみの場合",
 				args:     []string{"  "},
 				expected: "タイトルを入力してください\n",
+				exitCode: 1,
+			},
+			{
+
+				testName: "引数が4個の場合",
+				args:     []string{"title", "--body", "body", "xxxxx"},
+				expected: "" +
+					"引数が多すぎます\n" +
+					"Usage:\n" +
+					"  memo add <title> [--body <body>]\n" +
+					"  -body string\n" +
+					"    \tメモの本文\n",
+				exitCode: 1,
+			},
+			{
+
+				testName: "不正なオプションを渡した場合",
+				args:     []string{"--unknown"},
+				expected: "" +
+					"flag provided but not defined: -unknown\n" +
+					"Usage:\n" +
+					"  memo add <title> [--body <body>]\n" +
+					"  -body string\n" +
+					"    \tメモの本文\n",
+				exitCode: 1,
+			},
+			{
+				testName: "help",
+				args:     []string{"--help"},
+				expected: "" +
+					"Usage:\n" +
+					"  memo add <title> [--body <body>]\n" +
+					"  -body string\n" +
+					"    \tメモの本文\n",
+				exitCode: 0,
+			},
+			{
+				testName: "--のみ",
+				args:     []string{"--"},
+				expected: "" +
+					"Usage:\n" +
+					"  memo add <title> [--body <body>]\n" +
+					"  -body string\n" +
+					"    \tメモの本文\n",
+				exitCode: 1,
 			},
 		}
 
@@ -63,7 +117,7 @@ func TestAddMemo(t *testing.T) {
 			t.Run(tc.testName, func(t *testing.T) {
 				var stdout bytes.Buffer
 				var stderr bytes.Buffer
-				assertEqualsExitCode(t, cmd.AddMemo(&stdout, &stderr, tc.args), 1)
+				assertEqualsExitCode(t, cmd.AddMemo(&stdout, &stderr, tc.args), tc.exitCode)
 				assertEqualsMessage(t, stderr.String(), tc.expected)
 			})
 		}
@@ -82,6 +136,107 @@ func TestAddMemo(t *testing.T) {
 		assertEqualsExitCode(t, cmd.AddMemo(&stdout, &stderr, []string{"Failed Save Memo"}), 1)
 		assertEqualsMessage(t, stderr.String(), "メモの保存に失敗しました fake error\n")
 	})
+
+	t.Run("AddMemoを実行", func(t *testing.T) {
+		testCases := []struct {
+			testName      string
+			args          []string
+			exitCode      int
+			expectedTitle string
+			expectedBody  string
+		}{
+			{
+				testName:      "タイトルを指定できる",
+				args:          []string{"title"},
+				exitCode:      0,
+				expectedTitle: "title",
+				expectedBody:  "",
+			},
+			{
+				testName:      "タイトルの後ろにbodyを指定できる",
+				args:          []string{"title", "--body", "body"},
+				exitCode:      0,
+				expectedTitle: "title",
+				expectedBody:  "body",
+			},
+			{
+				testName: "先頭の未定義オプション",
+				args:     []string{"--unknown"},
+				exitCode: 1,
+			},
+			{
+				testName: "タイトルの後ろの未定義オプション",
+				args:     []string{"title", "--unknown"},
+				exitCode: 1,
+			},
+			{
+				testName: "オプションが位置引数より前",
+				args:     []string{"--body", "body", "title"},
+				exitCode: 1,
+			},
+			{
+				testName:      "--の後ろをタイトルとして扱う",
+				args:          []string{"--", "--help"},
+				exitCode:      0,
+				expectedTitle: "--help",
+				expectedBody:  "",
+			},
+			{
+				testName:      "--の後ろをタイトルとして扱う2",
+				args:          []string{"--body", "body", "--", "-draft"},
+				exitCode:      0,
+				expectedTitle: "-draft",
+				expectedBody:  "body",
+			},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.testName, func(t *testing.T) {
+				filePath := filepath.Join(t.TempDir(), "memos.json")
+
+				cmd := MemoCommandImpl{
+					MemoPath:        filePath,
+					TimeProvider:    &RealTimeProvider{},
+					StorageOperator: &storage.StorageOperatorImpl{},
+				}
+
+				var stdout bytes.Buffer
+				var stderr bytes.Buffer
+				assertEqualsExitCode(t, cmd.AddMemo(&stdout, &stderr, tc.args), tc.exitCode)
+
+				// 異常系はここまで
+				if tc.exitCode == 1 {
+					return
+				}
+
+				actual, err := realMemoOperator.LoadMemos(filePath)
+				if err != nil {
+					t.Fatalf("LoadMemos() err = %v", err)
+				}
+
+				if len(actual) != 1 {
+					t.Fatalf("actual.len = %d, expected = 1", len(actual))
+				}
+
+				if actual[0].Title != tc.expectedTitle {
+					t.Errorf(
+						"Title = %q, expected = %q",
+						actual[0].Title,
+						tc.expectedTitle,
+					)
+				}
+
+				if actual[0].Body != tc.expectedBody {
+					t.Errorf(
+						"Body = %q, expected = %q",
+						actual[0].Body,
+						tc.expectedBody,
+					)
+				}
+			})
+		}
+
+	})
 }
 
 type fakeFailSaveMemoOperator struct{}
@@ -95,19 +250,39 @@ func (f *fakeFailSaveMemoOperator) SaveMemos(path string, memos []Memo) error {
 }
 
 func TestListMemos(t *testing.T) {
-	t.Run("バリデーションエラー", func(t *testing.T) {
+	t.Run("引数チェック", func(t *testing.T) {
 
 		testCases := []struct {
 			testName string
 			args     []string
 			expected string
+			exitCode int
 		}{
 			{
 				testName: "パラメーターが1個の場合",
 				args:     []string{"aaaaa"},
 				expected: "" +
+					"引数が多すぎます\n" +
 					"Usage:\n" +
 					"  memo list\n",
+				exitCode: 1,
+			},
+			{
+				testName: "不正なオプションを渡した場合",
+				args:     []string{"--unknown"},
+				expected: "" +
+					"flag provided but not defined: -unknown\n" +
+					"Usage:\n" +
+					"  memo list\n",
+				exitCode: 1,
+			},
+			{
+				testName: "help",
+				args:     []string{"--help"},
+				expected: "" +
+					"Usage:\n" +
+					"  memo list\n",
+				exitCode: 0,
 			},
 		}
 
@@ -117,7 +292,7 @@ func TestListMemos(t *testing.T) {
 			t.Run(tc.testName, func(t *testing.T) {
 				var stdout bytes.Buffer
 				var stderr bytes.Buffer
-				assertEqualsExitCode(t, cmd.ListMemos(&stdout, &stderr, tc.args), 1)
+				assertEqualsExitCode(t, cmd.ListMemos(&stdout, &stderr, tc.args), tc.exitCode)
 				assertEqualsMessage(t, stderr.String(), tc.expected)
 			})
 		}
@@ -247,12 +422,13 @@ func TestShowMemo(t *testing.T) {
 		assertEqualsMessage(t, stderr.String(), "memo not found: 4\n")
 	})
 
-	t.Run("バリデーションエラー", func(t *testing.T) {
+	t.Run("引数チェック", func(t *testing.T) {
 
 		testCases := []struct {
 			testName string
 			args     []string
 			expected string
+			exitCode int
 		}{
 			{
 				testName: "パラメーターが0個の場合",
@@ -260,18 +436,39 @@ func TestShowMemo(t *testing.T) {
 				expected: "" +
 					"Usage:\n" +
 					"  memo show <id>\n",
+				exitCode: 1,
 			},
 			{
 				testName: "パラメーターが2個の場合",
 				args:     []string{"aaa", "bbb"},
 				expected: "" +
+					"引数が多すぎます\n" +
 					"Usage:\n" +
 					"  memo show <id>\n",
+				exitCode: 1,
 			},
 			{
 				testName: "パラメーターが数値でない場合",
 				args:     []string{"a"},
 				expected: "idは数値を入力してください: a\n",
+				exitCode: 1,
+			},
+			{
+				testName: "不正なオプションを渡した場合",
+				args:     []string{"--unknown"},
+				expected: "" +
+					"flag provided but not defined: -unknown\n" +
+					"Usage:\n" +
+					"  memo show <id>\n",
+				exitCode: 1,
+			},
+			{
+				testName: "help",
+				args:     []string{"--help"},
+				expected: "" +
+					"Usage:\n" +
+					"  memo show <id>\n",
+				exitCode: 0,
 			},
 		}
 
@@ -281,7 +478,7 @@ func TestShowMemo(t *testing.T) {
 			t.Run(tc.testName, func(t *testing.T) {
 				var stdout bytes.Buffer
 				var stderr bytes.Buffer
-				assertEqualsExitCode(t, cmd.ShowMemo(&stdout, &stderr, tc.args), 1)
+				assertEqualsExitCode(t, cmd.ShowMemo(&stdout, &stderr, tc.args), tc.exitCode)
 				assertEqualsMessage(t, stderr.String(), tc.expected)
 			})
 		}
@@ -325,11 +522,12 @@ func TestSearch(t *testing.T) {
 		t.Fatalf("SaveMemos() err = %v", err)
 	}
 
-	t.Run("バリデーションエラー", func(t *testing.T) {
+	t.Run("引数チェック", func(t *testing.T) {
 		testCases := []struct {
 			testName string
 			args     []string
 			expected string
+			exitCode int
 		}{
 			{
 				testName: "パラメーターが0個の場合",
@@ -337,18 +535,39 @@ func TestSearch(t *testing.T) {
 				expected: "" +
 					"Usage:\n" +
 					"  memo search <keyword>\n",
+				exitCode: 1,
 			},
 			{
 				testName: "パラメーターが2個の場合",
 				args:     []string{"aaa", "bbb"},
 				expected: "" +
+					"引数が多すぎます\n" +
 					"Usage:\n" +
 					"  memo search <keyword>\n",
+				exitCode: 1,
 			},
 			{
 				testName: "キーワードが空文字の場合",
 				args:     []string{""},
 				expected: "キーワードを入力してください\n",
+				exitCode: 1,
+			},
+			{
+				testName: "不正なオプションを渡した場合",
+				args:     []string{"--unknown"},
+				expected: "" +
+					"flag provided but not defined: -unknown\n" +
+					"Usage:\n" +
+					"  memo search <keyword>\n",
+				exitCode: 1,
+			},
+			{
+				testName: "help",
+				args:     []string{"--help"},
+				expected: "" +
+					"Usage:\n" +
+					"  memo search <keyword>\n",
+				exitCode: 0,
 			},
 		}
 
@@ -356,7 +575,7 @@ func TestSearch(t *testing.T) {
 			t.Run(tc.testName, func(t *testing.T) {
 				var stdout bytes.Buffer
 				var stderr bytes.Buffer
-				assertEqualsExitCode(t, cmd.SearchMemos(&stdout, &stderr, tc.args), 1)
+				assertEqualsExitCode(t, cmd.SearchMemos(&stdout, &stderr, tc.args), tc.exitCode)
 				assertEqualsMessage(t, stderr.String(), tc.expected)
 			})
 		}
@@ -492,12 +711,13 @@ func TestDeleteMemo(t *testing.T) {
 
 	})
 
-	t.Run("バリデーションエラー", func(t *testing.T) {
+	t.Run("引数チェック", func(t *testing.T) {
 
 		testCases := []struct {
 			testName string
 			args     []string
 			expected string
+			exitCode int
 		}{
 			{
 				testName: "パラメーターが0個の場合",
@@ -505,18 +725,39 @@ func TestDeleteMemo(t *testing.T) {
 				expected: "" +
 					"Usage:\n" +
 					"  memo delete <id>\n",
+				exitCode: 1,
 			},
 			{
 				testName: "パラメーターが2個の場合",
 				args:     []string{"1", "aaa"},
 				expected: "" +
+					"引数が多すぎます\n" +
 					"Usage:\n" +
 					"  memo delete <id>\n",
+				exitCode: 1,
 			},
 			{
 				testName: "パラメーターが数値でない場合",
 				args:     []string{"a"},
 				expected: "idは数値を入力してください: a\n",
+				exitCode: 1,
+			},
+			{
+				testName: "不正なオプションを渡した場合",
+				args:     []string{"--unknown"},
+				expected: "" +
+					"flag provided but not defined: -unknown\n" +
+					"Usage:\n" +
+					"  memo delete <id>\n",
+				exitCode: 1,
+			},
+			{
+				testName: "help",
+				args:     []string{"--help"},
+				expected: "" +
+					"Usage:\n" +
+					"  memo delete <id>\n",
+				exitCode: 0,
 			},
 		}
 
@@ -531,7 +772,7 @@ func TestDeleteMemo(t *testing.T) {
 
 			exitCode := cmd.DeleteMemo(&stdout, &stderr, tc.args)
 
-			assertEqualsExitCode(t, exitCode, 1)
+			assertEqualsExitCode(t, exitCode, tc.exitCode)
 			assertEqualsMessage(t, stderr.String(), tc.expected)
 		}
 	})
