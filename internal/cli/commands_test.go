@@ -188,6 +188,13 @@ func TestAddMemo(t *testing.T) {
 				expectedTitle: "-draft",
 				expectedBody:  "body",
 			},
+			{
+				testName:      "bodyで改行ありのメッセージも指定できる",
+				args:          []string{"title", "--body", "line 1\nline 2"},
+				exitCode:      0,
+				expectedTitle: "title",
+				expectedBody:  "line 1\nline 2",
+			},
 		}
 
 		for _, tc := range testCases {
@@ -625,6 +632,56 @@ func TestSearch(t *testing.T) {
 		var stderr bytes.Buffer
 		assertEqualsExitCode(t, cmd.SearchMemos(&stdout, &stderr, []string{"Yellow"}), 1)
 		assertEqualsMessage(t, stderr.String(), "No matching memos found.\n")
+	})
+}
+
+func TestAddShowSearch(t *testing.T) {
+	t.Run("AddMemo で登録したメモを ShowMemo や SearchMemos で表示される", func(t *testing.T) {
+		filePath := filepath.Join(t.TempDir(), "memos.json")
+
+		cmd := MemoCommandImpl{
+			MemoPath:        filePath,
+			TimeProvider:    &fakeTimeProvider{},
+			StorageOperator: &storage.StorageOperatorImpl{},
+		}
+
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+		assertEqualsExitCode(t, cmd.AddMemo(&stdout, &stderr, []string{"title", "--body", "body"}), 0)
+
+		stdout.Reset()
+		stderr.Reset()
+		assertEqualsExitCode(t, cmd.ShowMemo(&stdout, &stderr, []string{"1"}), 0)
+		assertEqualsMessage(
+			t,
+			stdout.String(),
+			""+
+				"# title\n"+
+				"\n"+
+				"ID: 1\n"+
+				"Created: 2026-07-14 10:00\n"+
+				"Updated: 2026-07-14 10:00\n"+
+				"\n"+
+				"body\n",
+		)
+
+		stdout.Reset()
+		stderr.Reset()
+		assertEqualsExitCode(t, cmd.SearchMemos(&stdout, &stderr, []string{"title"}), 0)
+		assertEqualsMessage(
+			t,
+			stdout.String(),
+			"1 title\t2026-07-14\n",
+		)
+
+		stdout.Reset()
+		stderr.Reset()
+		assertEqualsExitCode(t, cmd.SearchMemos(&stdout, &stderr, []string{"body"}), 0)
+		assertEqualsMessage(
+			t,
+			stdout.String(),
+			"1 title\t2026-07-14\n",
+		)
 	})
 }
 
