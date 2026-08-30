@@ -99,6 +99,16 @@ func TestAddMemo(t *testing.T) {
 					"    \tメモの本文\n",
 				exitCode: 0,
 			},
+			{
+				testName: "--のみ",
+				args:     []string{"--"},
+				expected: "" +
+					"Usage:\n" +
+					"  memo add <title> [--body <body>]\n" +
+					"  -body string\n" +
+					"    \tメモの本文\n",
+				exitCode: 1,
+			},
 		}
 
 		cmd := MemoCommandImpl{}
@@ -129,14 +139,25 @@ func TestAddMemo(t *testing.T) {
 
 	t.Run("AddMemoを実行", func(t *testing.T) {
 		testCases := []struct {
-			testName string
-			args     []string
-			exitCode int
+			testName      string
+			args          []string
+			exitCode      int
+			expectedTitle string
+			expectedBody  string
 		}{
 			{
-				testName: "タイトルの後ろにbodyを指定できる",
-				args:     []string{"title", "--body", "body"},
-				exitCode: 0,
+				testName:      "タイトルを指定できる",
+				args:          []string{"title"},
+				exitCode:      0,
+				expectedTitle: "title",
+				expectedBody:  "",
+			},
+			{
+				testName:      "タイトルの後ろにbodyを指定できる",
+				args:          []string{"title", "--body", "body"},
+				exitCode:      0,
+				expectedTitle: "title",
+				expectedBody:  "body",
 			},
 			{
 				testName: "先頭の未定義オプション",
@@ -152,6 +173,20 @@ func TestAddMemo(t *testing.T) {
 				testName: "オプションが位置引数より前",
 				args:     []string{"--body", "body", "title"},
 				exitCode: 1,
+			},
+			{
+				testName:      "--の後ろをタイトルとして扱う",
+				args:          []string{"--", "--help"},
+				exitCode:      0,
+				expectedTitle: "--help",
+				expectedBody:  "",
+			},
+			{
+				testName:      "--の後ろをタイトルとして扱う2",
+				args:          []string{"--body", "body", "--", "-draft"},
+				exitCode:      0,
+				expectedTitle: "-draft",
+				expectedBody:  "body",
 			},
 		}
 
@@ -183,19 +218,19 @@ func TestAddMemo(t *testing.T) {
 					t.Fatalf("actual.len = %d, expected = 1", len(actual))
 				}
 
-				if actual[0].Title != "title" {
+				if actual[0].Title != tc.expectedTitle {
 					t.Errorf(
 						"Title = %q, expected = %q",
 						actual[0].Title,
-						"title",
+						tc.expectedTitle,
 					)
 				}
 
-				if actual[0].Body != "body" {
+				if actual[0].Body != tc.expectedBody {
 					t.Errorf(
 						"Body = %q, expected = %q",
 						actual[0].Body,
-						"body",
+						tc.expectedBody,
 					)
 				}
 			})
