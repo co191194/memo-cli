@@ -18,6 +18,7 @@ type MemoCommand interface {
 	ShowMemo(stdout io.Writer, stderr io.Writer, args []string) int
 	SearchMemos(stdout io.Writer, stderr io.Writer, args []string) int
 	DeleteMemo(stdout io.Writer, stderr io.Writer, args []string) int
+	EditMemo(stdout io.Writer, stderr io.Writer, args []string) int
 }
 
 type TimeProvider interface {
@@ -292,6 +293,106 @@ func parseDeleteArgs(stderr io.Writer, args []string) (deleteOptions, error) {
 	return options, nil
 }
 
+type editOptions struct {
+	ID    int
+	Title *string
+	Body  *string
+}
+
+func (cmd *MemoCommandImpl) EditMemo(stdout io.Writer, stderr io.Writer, args []string) int {
+
+	options, err := parseEditArgs(stderr, args)
+	if err != nil {
+		return resolveParseErrorExitCode(err)
+	}
+
+	memos, err := cmd.StorageOperator.LoadMemos(cmd.MemoPath)
+	if err != nil {
+		printOpenFileError(stderr, err)
+		return 1
+	}
+
+	input := parseEditInput(options, cmd.TimeProvider.Now())
+
+	editedMemos, err := memo.EditMemo(memos, input)
+	if err != nil {
+		fmt.Fprintln(stderr, err.Error())
+		return 1
+	}
+
+	if err := cmd.StorageOperator.SaveMemos(cmd.MemoPath, editedMemos); err != nil {
+		fmt.Fprintln(stderr, "メモの保存に失敗しました", err)
+		return 1
+	}
+
+	return 0
+}
+
+func parseEditArgs(stderr io.Writer, args []string) (editOptions, error) {
+	var options editOptions
+
+	fs := newCommandFlagSet("edit", "memo edit <id> [--title <title>] [--body <body>]", stderr)
+
+	var title, body string
+	fs.StringVar(
+		&title,
+		"title",
+		"",
+		"メモのタイトル",
+	)
+
+	fs.StringVar(
+		&body,
+		"body",
+		"",
+		"メモの本文",
+	)
+
+	positionals, err := parseCommandArgs(fs, args, 1)
+	if err != nil {
+		return editOptions{}, err
+	}
+
+	fs.Visit(func(f *flag.Flag) {
+		switch f.Name {
+		case "title":
+			options.Title = &title
+		case "body":
+			options.Body = &body
+		}
+	})
+
+	if options.Title == nil && options.Body == nil {
+		fmt.Fprintln(stderr, "-titleまたは-bodyを指定してください")
+		fs.Usage()
+		return editOptions{}, fmt.Errorf("not exists title and body options")
+	}
+
+	if options.Title != nil && isEmpty(*options.Title) {
+		printEmptyError(stderr, "タイトル")
+		return editOptions{}, fmt.Errorf("title is empty")
+	}
+
+	id, err := resolveId(positionals[0])
+	if err != nil {
+		fmt.Fprintln(stderr, err.Error())
+		return editOptions{}, err
+	}
+
+	options.ID = id
+
+	return options, nil
+}
+
+func parseEditInput(options editOptions, now time.Time) memo.EditMemoInput {
+	return memo.EditMemoInput{
+		ID:    options.ID,
+		Title: options.Title,
+		Body:  options.Body,
+		Now:   now,
+	}
+}
+
 func printOpenFileError(stderr io.Writer, err error) {
 	fmt.Fprintln(stderr, "メモを開くことができませんでした", err)
 }
@@ -308,6 +409,9 @@ func resolveId(id string) (int, error) {
 	resolveId, err := strconv.Atoi(id)
 	if err != nil {
 		return -1, errors.New("idは数値を入力してください: " + id)
+	}
+	if resolveId <= 0 {
+		return -1, errors.New("idは1以上で指定してください")
 	}
 	return resolveId, nil
 }
