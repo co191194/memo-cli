@@ -1,7 +1,10 @@
 package storage
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,7 +12,9 @@ import (
 	"github.com/co191194/memo-cli/internal/memo"
 )
 
-type StorageOperatorImpl struct{}
+type StorageOperatorImpl struct {
+	rename func(oldPath, newPath string) error
+}
 
 type Memo = memo.Memo
 
@@ -29,9 +34,42 @@ func (mo *StorageOperatorImpl) LoadMemos(path string) ([]Memo, error) {
 	}
 	defer file.Close()
 
-	var memos []Memo
-	if err := json.NewDecoder(file).Decode(&memos); err != nil {
+	decoder := json.NewDecoder(file)
+	var elements []json.RawMessage
+	if err := decoder.Decode(&elements); err != nil {
 		return nil, err
+	}
+	if elements == nil {
+		return nil, fmt.Errorf("memo document must be an array")
+	}
+	var extra json.RawMessage
+	if err := decoder.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return nil, fmt.Errorf("unexpected value after memo array")
+		}
+		return nil, err
+	}
+
+	memos := make([]Memo, 0, len(elements))
+	for i, element := range elements {
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(element, &fields); err != nil {
+			return nil, fmt.Errorf("memo %d: %w", i, err)
+		}
+		if fields == nil {
+			return nil, fmt.Errorf("memo %d must be an object", i)
+		}
+		for _, key := range []string{"id", "title", "body", "created_at", "updated_at"} {
+			value, ok := fields[key]
+			if !ok || bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+				return nil, fmt.Errorf("memo %d: missing or null %s", i, key)
+			}
+		}
+		var item Memo
+		if err := json.Unmarshal(element, &item); err != nil {
+			return nil, fmt.Errorf("memo %d: %w", i, err)
+		}
+		memos = append(memos, item)
 	}
 
 	return memos, nil
@@ -69,7 +107,11 @@ func (mo *StorageOperatorImpl) SaveMemos(path string, memos []Memo) error {
 		return err
 	}
 
-	if err := os.Rename(tmpPath, path); err != nil {
+	rename := os.Rename
+	if mo.rename != nil {
+		rename = mo.rename
+	}
+	if err := rename(tmpPath, path); err != nil {
 		return err
 	}
 
