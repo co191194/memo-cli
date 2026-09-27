@@ -1,6 +1,7 @@
 package storage_test
 
 import (
+	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -55,5 +56,59 @@ func TestLoadMemos_FileDoesNotExist(t *testing.T) {
 
 	if len(actual) != 0 {
 		t.Errorf("len(LoadMemos()) = %d, expected = 0", len(actual))
+	}
+}
+
+func TestStoragePaths(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		path string
+		want func(cwd, home string) string
+	}{
+		{
+			name: "home prefix",
+			path: "~/memos/test.json",
+			want: func(_, home string) string { return filepath.Join(home, "memos", "test.json") },
+		},
+		{
+			name: "bare tilde",
+			path: "~",
+			want: func(cwd, _ string) string { return filepath.Join(cwd, "~") },
+		},
+		{
+			name: "named user",
+			path: "~user/memos.json",
+			want: func(cwd, _ string) string { return filepath.Join(cwd, "~user", "memos.json") },
+		},
+		{
+			name: "relative",
+			path: "data/memos.json",
+			want: func(cwd, _ string) string { return filepath.Join(cwd, "data", "memos.json") },
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cwd := t.TempDir()
+			home := t.TempDir()
+			t.Chdir(cwd)
+			t.Setenv("HOME", home)
+
+			memos := []Memo{{ID: 1, Title: "Work"}}
+			mo := StorageOperatorImpl{}
+			if err := mo.SaveMemos(tc.path, memos); err != nil {
+				t.Fatalf("SaveMemos(%q) error = %v", tc.path, err)
+			}
+			wantPath := tc.want(cwd, home)
+			if _, err := os.Stat(wantPath); err != nil {
+				t.Fatalf("saved file %q: %v", wantPath, err)
+			}
+
+			got, err := mo.LoadMemos(tc.path)
+			if err != nil {
+				t.Fatalf("LoadMemos(%q) error = %v", tc.path, err)
+			}
+			if !reflect.DeepEqual(got, memos) {
+				t.Errorf("LoadMemos(%q) = %v, want %v", tc.path, got, memos)
+			}
+		})
 	}
 }
