@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"strings"
 
 	"github.com/co191194/memo-cli/internal/cli"
 	"github.com/co191194/memo-cli/internal/storage"
@@ -10,7 +11,7 @@ import (
 func main() {
 	app := cli.App{
 		Command: &cli.MemoCommandImpl{
-			MemoPath:        "~/.memo/memos.json",
+			MemoPath:        resolveMemoPath(),
 			TimeProvider:    &cli.RealTimeProvider{},
 			StorageOperator: &storage.StorageOperatorImpl{},
 		},
@@ -22,4 +23,12 @@ func main() {
 	)
 
 	os.Exit(exitCode)
+}
+
+func resolveMemoPath() string {
+	memoPath := os.Getenv("MEMO_PATH")
+	if strings.TrimSpace(memoPath) == "" {
+		return "~/.memo/memos.json"
+	}
+	return memoPath
 }
