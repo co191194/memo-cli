@@ -78,3 +78,44 @@ func BuildDeletedMemos(memos []Memo, id int) ([]Memo, error) {
 
 	return deletedMemos, nil
 }
+
+type EditMemoInput struct {
+	ID    int
+	Title *string
+	Body  *string
+	Now   time.Time
+}
+
+func EditMemo(memos []Memo, input EditMemoInput) ([]Memo, error) {
+
+	editedMemos := make([]Memo, len(memos))
+	copy(editedMemos, memos)
+
+	// inputについて、正のID・少なくとも一方の指定・指定タイトルの妥当性は呼び出し側で検証済み
+	index, err := findIndexById(editedMemos, input.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	if input.Title != nil {
+		editedMemos[index].Title = *input.Title
+	}
+
+	if input.Body != nil {
+		editedMemos[index].Body = *input.Body
+	}
+
+	editedMemos[index].UpdatedAt = input.Now
+
+	return editedMemos, nil
+}
+
+func findIndexById(memos []Memo, id int) (int, error) {
+	for index, memo := range memos {
+		if memo.ID == id {
+			return index, nil
+		}
+	}
+
+	return -1, newNotFoundError(id)
+}

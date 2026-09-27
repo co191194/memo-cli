@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"testing"
 
@@ -14,6 +15,9 @@ type fakeMemoCommand struct {
 	MemoPath     string
 	TimeProvider cli.TimeProvider
 	Command      cli.MemoCommand
+	editArgs     []string
+	editCalls    int
+	editExitCode int
 }
 
 type App = cli.App
@@ -65,6 +69,57 @@ func (cmd *fakeMemoCommand) DeleteMemo(stdout io.Writer, stderr io.Writer, args 
 		return 1
 	}
 	return 0
+}
+
+func (cmd *fakeMemoCommand) EditMemo(stdout io.Writer, stderr io.Writer, args []string) int {
+	cmd.editCalls++
+	cmd.editArgs = append([]string(nil), args...)
+	if cmd.editExitCode != 0 {
+		fmt.Fprint(stderr, "Failed EditMemo()")
+		return cmd.editExitCode
+	}
+	fmt.Fprint(stdout, "Called EditMemo()")
+	return 0
+}
+
+func TestRun_EditMemo(t *testing.T) {
+	args := []string{"1", "--title", "Updated Title", "--body", "Updated Body"}
+	command := &fakeMemoCommand{}
+	app := App{Command: command}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	exitCode := app.Run(&stdout, &stderr, append([]string{"edit"}, args...))
+
+	if exitCode != 0 {
+		t.Errorf("exitCode = %d, expected 0", exitCode)
+	}
+	if command.editCalls != 1 || !slices.Equal(command.editArgs, args) {
+		t.Errorf("EditMemo() calls = %d, args = %q, expected 1 call with %q", command.editCalls, command.editArgs, args)
+	}
+	if stdout.String() != "Called EditMemo()" || stderr.String() != "" {
+		t.Errorf("stdout = %q, stderr = %q", stdout.String(), stderr.String())
+	}
+}
+
+func TestRun_EditMemoFailure(t *testing.T) {
+	command := &fakeMemoCommand{editExitCode: 1}
+	app := App{Command: command}
+	args := []string{"1", "--title", ""}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	exitCode := app.Run(&stdout, &stderr, append([]string{"edit"}, args...))
+
+	if exitCode != 1 {
+		t.Errorf("exitCode = %d, expected 1", exitCode)
+	}
+	if command.editCalls != 1 || !slices.Equal(command.editArgs, args) {
+		t.Errorf("EditMemo() calls = %d, args = %q, expected 1 call with %q", command.editCalls, command.editArgs, args)
+	}
+	if stdout.String() != "" || stderr.String() != "Failed EditMemo()" {
+		t.Errorf("stdout = %q, stderr = %q", stdout.String(), stderr.String())
+	}
 }
 
 func TestRun(t *testing.T) {
@@ -120,6 +175,7 @@ func TestRun_PrintHelp(t *testing.T) {
 	sb.WriteString("\n")
 	sb.WriteString("Commands:\n")
 	sb.WriteString("  add     Add a new memo\n")
+	sb.WriteString("  edit    Edit a memo\n")
 	sb.WriteString("  list    List memos\n")
 	sb.WriteString("  show    Show a memo\n")
 	sb.WriteString("  search  Search memos\n")
@@ -138,7 +194,10 @@ func TestRun_PrintHelp(t *testing.T) {
 			}
 
 			if stderr.String() != expected {
-				t.Errorf("actual = %q, expected = %q", stdout.String(), expected)
+				t.Errorf("actual = %q, expected = %q", stderr.String(), expected)
+			}
+			if stdout.String() != "" {
+				t.Errorf("stdout = %q, expected empty", stdout.String())
 			}
 		})
 	}
@@ -174,6 +233,7 @@ func TestHelp(t *testing.T) {
 		"\n" +
 		"Commands:\n" +
 		"  add     Add a new memo\n" +
+		"  edit    Edit a memo\n" +
 		"  list    List memos\n" +
 		"  show    Show a memo\n" +
 		"  search  Search memos\n" +
@@ -192,7 +252,35 @@ func TestHelp(t *testing.T) {
 			if stdout.String() != expected {
 				t.Errorf("actual = %q, expected = %q", stdout.String(), expected)
 			}
+			if stderr.String() != "" {
+				t.Errorf("stderr = %q, expected empty", stderr.String())
+			}
 
+		})
+	}
+}
+
+func TestRun_EditMemoHelp(t *testing.T) {
+	app := App{Command: &MemoCommandImpl{}}
+	usage := "Usage:\n" +
+		"  memo edit <id> [--title <title>] [--body <body>]\n" +
+		"  -body string\n" +
+		"    \tメモの本文\n" +
+		"  -title string\n" +
+		"    \tメモのタイトル\n"
+
+	for _, option := range []string{"--help", "-h"} {
+		t.Run(option, func(t *testing.T) {
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
+			exitCode := app.Run(&stdout, &stderr, []string{"edit", option})
+
+			if exitCode != 0 {
+				t.Errorf("exitCode = %d, expected 0", exitCode)
+			}
+			if stdout.String() != "" || stderr.String() != usage {
+				t.Errorf("stdout = %q, stderr = %q, expected stderr = %q", stdout.String(), stderr.String(), usage)
+			}
 		})
 	}
 }
