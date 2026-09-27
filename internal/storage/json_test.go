@@ -1,6 +1,7 @@
 package storage_test
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -56,6 +57,120 @@ func TestLoadMemos_FileDoesNotExist(t *testing.T) {
 
 	if len(actual) != 0 {
 		t.Errorf("len(LoadMemos()) = %d, expected = 0", len(actual))
+	}
+}
+
+func TestLoadMemos_InvalidJSON(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		data string
+	}{
+		{"syntax error", `[{`},
+		{"null document", `null`},
+		{"non-array document", `{}`},
+		{"second value", `[] {}`},
+		{"trailing garbage", `[] not-json`},
+		{"null element", `[null]`},
+		{"non-object element", `[1]`},
+		{"missing id", `[{"title":"Title","body":"","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`},
+		{"missing title", `[{"id":1,"body":"","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`},
+		{"missing body", `[{"id":1,"title":"Title","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`},
+		{"missing created at", `[{"id":1,"title":"Title","body":"","updated_at":"2026-01-01T00:00:00Z"}]`},
+		{"missing updated at", `[{"id":1,"title":"Title","body":"","created_at":"2026-01-01T00:00:00Z"}]`},
+		{"null field", `[{"id":null,"title":"Title","body":"","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`},
+		{"null title", `[{"id":1,"title":null,"body":"","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`},
+		{"null body", `[{"id":1,"title":"Title","body":null,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`},
+		{"null date", `[{"id":1,"title":"Title","body":"","created_at":null,"updated_at":"2026-01-01T00:00:00Z"}]`},
+		{"wrong type", `[{"id":"1","title":"Title","body":"","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`},
+		{"wrong title type", `[{"id":1,"title":1,"body":"","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`},
+		{"wrong body type", `[{"id":1,"title":"Title","body":false,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`},
+		{"invalid date", `[{"id":1,"title":"Title","body":"","created_at":"yesterday","updated_at":"2026-01-01T00:00:00Z"}]`},
+		{"invalid updated date", `[{"id":1,"title":"Title","body":"","created_at":"2026-01-01T00:00:00Z","updated_at":"yesterday"}]`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "memos.json")
+			before := []byte(tc.data)
+			if err := os.WriteFile(path, before, 0600); err != nil {
+				t.Fatal(err)
+			}
+
+			got, err := (&StorageOperatorImpl{}).LoadMemos(path)
+			if err == nil || got != nil {
+				t.Errorf("LoadMemos() = %v, %v; want nil and an error", got, err)
+			}
+			after, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(before, after) {
+				t.Errorf("invalid JSON was modified: before = %q, after = %q", before, after)
+			}
+		})
+	}
+}
+
+func TestLoadMemos_EmptyArrayWithTrailingWhitespace(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "memos.json")
+	if err := os.WriteFile(path, []byte("[] \n\t"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := (&StorageOperatorImpl{}).LoadMemos(path)
+	if err != nil || got == nil || len(got) != 0 {
+		t.Errorf("LoadMemos() = %v, %v; want empty non-nil slice", got, err)
+	}
+}
+
+func TestSaveMemos_ParentIsFile(t *testing.T) {
+	dir := t.TempDir()
+	parent := filepath.Join(dir, "parent")
+	if err := os.WriteFile(parent, []byte("unchanged"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(parent, "memos.json")
+	if err := (&StorageOperatorImpl{}).SaveMemos(path, []Memo{{ID: 1}}); err == nil {
+		t.Fatal("SaveMemos() should fail when parent is a file")
+	}
+	data, err := os.ReadFile(parent)
+	if err != nil || string(data) != "unchanged" {
+		t.Errorf("parent changed: data = %q, error = %v", data, err)
+	}
+	if _, err := os.Stat(path); err == nil {
+		t.Error("destination should not exist")
+	}
+	if matches, err := filepath.Glob(filepath.Join(dir, ".memos-*.json")); err != nil || len(matches) != 0 {
+		t.Errorf("temporary files = %v, error = %v", matches, err)
+	}
+}
+
+func TestV010FixtureRoundTrip(t *testing.T) {
+	// v0.1.0 の memo.go に定義された JSON フィールドと保存順を固定した fixture。
+	fixture, err := os.ReadFile(filepath.Join("..", "..", "testdata", "v0.1.0-memos.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "memos.json")
+	if err := os.WriteFile(path, fixture, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	operator := &StorageOperatorImpl{}
+	got, err := operator.LoadMemos(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Memo{
+		{ID: 4, Title: "Legacy Alpha", Body: "", CreatedAt: time.Date(2026, 1, 2, 9, 30, 0, 0, time.UTC), UpdatedAt: time.Date(2026, 1, 2, 9, 30, 0, 0, time.UTC)},
+		{ID: 2, Title: "Legacy Beta", Body: "legacy-needle", CreatedAt: time.Date(2026, 1, 3, 12, 10, 0, 0, time.UTC), UpdatedAt: time.Date(2026, 1, 4, 13, 20, 0, 0, time.UTC)},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("LoadMemos(v0.1.0) = %+v, want %+v", got, want)
+	}
+	if err := operator.SaveMemos(path, got); err != nil {
+		t.Fatal(err)
+	}
+	again, err := operator.LoadMemos(path)
+	if err != nil || !reflect.DeepEqual(again, want) {
+		t.Errorf("round trip = %+v, %v; want %+v", again, err, want)
 	}
 }
 
