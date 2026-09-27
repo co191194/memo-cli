@@ -1220,15 +1220,7 @@ func TestEditMemo(t *testing.T) {
 
 				for idx, beforeMemo := range beforeMemos {
 					afterMemo := afterMemos[idx]
-					if afterMemo != beforeMemo {
-						t.Errorf(
-							"afterMemos[%d] = %v, beforeMemos[%d] = %v",
-							idx,
-							afterMemo,
-							idx,
-							beforeMemo,
-						)
-					}
+					assertEqualsMemo(t, idx, afterMemo, beforeMemo)
 				}
 			})
 		}
@@ -1382,9 +1374,7 @@ func TestEditMemo(t *testing.T) {
 					)
 				}
 
-				if beforeMemos[1] != memos[1] {
-					t.Errorf("actual memos[1] = %v, beforeMemos[1] = %v", beforeMemos[1], memos[1])
-				}
+				assertEqualsMemo(t, 1, memos[1], beforeMemos[1])
 
 			})
 		}
@@ -1472,4 +1462,48 @@ func assertEqualsMessage(t *testing.T, actual string, expected string) {
 
 func date(year int, month time.Month, day int, hour int, min int) time.Time {
 	return time.Date(year, month, day, hour, min, 0, 0, time.Local)
+}
+
+func assertEqualsMemo(t *testing.T, index int, actual Memo, expected Memo) {
+	t.Helper()
+
+	if actual.ID != expected.ID {
+		t.Errorf(
+			"actual[%d].ID = %d, expected[%d].ID = %d",
+			index, actual.ID,
+			index, expected.ID,
+		)
+	}
+
+	if actual.Title != expected.Title {
+		t.Errorf(
+			"actual[%d].Title = %q, expected[%d].Title = %q",
+			index, actual.Title,
+			index, expected.Title,
+		)
+	}
+
+	if actual.Body != expected.Body {
+		t.Errorf(
+			"actual[%d].Body = %q, expected[%d].Body = %q",
+			index, actual.Body,
+			index, expected.Body,
+		)
+	}
+
+	if !actual.CreatedAt.Equal(expected.CreatedAt) {
+		t.Errorf(
+			"actual[%d].CreatedAt = %q, expected[%d].CreatedAt = %q",
+			index, actual.CreatedAt.String(),
+			index, expected.CreatedAt.String(),
+		)
+	}
+
+	if !actual.UpdatedAt.Equal(expected.UpdatedAt) {
+		t.Errorf(
+			"actual[%d].UpdatedAt = %q, expected[%d].UpdatedAt = %q",
+			index, actual.UpdatedAt.String(),
+			index, expected.UpdatedAt.String(),
+		)
+	}
 }
