@@ -1,434 +1,121 @@
 # memo
 
-Go学習用のシンプルなMarkdownメモCLIです。
+ローカルのJSONファイルにMarkdown形式のメモを保存する、個人用のGo製CLIツールです。v0.2では、タイトルと本文の追加・編集、一覧・詳細表示・検索・削除、保存先の切り替えができます。
 
-ターミナルからメモを追加・一覧表示・詳細表示・検索・削除できる個人用ツールを作成します。
+## セットアップ
 
-このプロジェクトは、Goの基本文法や標準ライブラリの使い方を学ぶことを目的としています。
-
-## 目的
-
-このアプリケーションの主な目的は、Goで小さなCLIアプリを作りながら、以下の内容を学習することです。
-
-* Goの基本文法
-* `struct` の定義と利用
-* スライスの操作
-* ファイルの読み書き
-* JSONのエンコード・デコード
-* エラーハンドリング
-* コマンドライン引数の扱い
-* 関数分割
-* パッケージ分割
-* ユニットテスト
-
-## 概要
-
-`memo` は、ローカル環境でMarkdown形式のメモを管理するためのCLIツールです。
-
-最初のバージョンでは、データベースは使用せず、メモをJSONファイルに保存します。
-
-保存先の例:
-
-```txt
-~/.memo/memos.json
-```
-
-## 完成イメージ
-
-以下のようなコマンドでメモを管理できることを目指します。
+Go 1.26.4以降が必要です（[go.mod](go.mod)を参照）。リポジトリを取得してビルドします。
 
 ```bash
-memo add "Goのstructを学ぶ"
-memo add "JSONファイル保存を実装する"
-memo list
-memo show 1
-memo search JSON
-memo delete 1
-memo list
+git clone https://github.com/co191194/memo-cli.git
+cd memo-cli
+go build -o memo ./cmd/memo
 ```
+
+以下の例では、ビルドした `./memo` を使います。`memo` を実行したい場合は、バイナリを `PATH` の通った場所へ置いてください。リポジトリには `go.mod` があるため、`go mod init` は不要です。
+
+```bash
+./memo add "Goのメモ" --body "interfaceについて調べる"
+./memo show 1
+./memo search interface
+./memo edit 1 --body "interfaceと実装について調べる"
+./memo list
+```
+
+初期設定では `~/.memo/memos.json` に保存します。ファイルがまだない場合はメモ0件として扱い、初回の保存時に親ディレクトリとファイルを作成します。既存のメモを削除したくない場合は、以下の `MEMO_PATH` で別の保存先を指定して試してください。
 
 ## コマンド一覧
 
-| コマンド                    | 説明               |
-| ----------------------- | ---------------- |
-| `memo add <title> [--body <body>]`      | メモを追加する          |
-| `memo list`             | メモを一覧表示する        |
-| `memo show <id>`        | 指定したIDのメモを詳細表示する |
-| `memo search <keyword>` | キーワードでメモを検索する    |
-| `memo delete <id>`      | 指定したIDのメモを削除する   |
+| コマンド | 説明 |
+|---|---|
+| `./memo add <title> [--body <body>]` | メモを追加する |
+| `./memo edit <id> [--title <title>] [--body <body>]` | 指定したメモを編集する（少なくとも一方のオプションが必要） |
+| `./memo list` | メモのID・タイトル・作成日を一覧表示する |
+| `./memo show <id>` | タイトル・本文・作成日時・更新日時などを表示する |
+| `./memo search <keyword>` | タイトルまたは本文から検索する |
+| `./memo delete <id>` | 指定したメモを削除する（確認なし） |
+| `./memo help` | コマンド一覧を表示する |
 
-## コマンド仕様
+個別の使い方は `./memo <command> --help` でも確認できます。IDは1以上の整数です。
 
-### メモを追加する
-
-```bash
-memo add "Goのエラーハンドリングについて学ぶ" --body "try-catch構文はなく、if文でハンドリングする"
-```
-
-タイトルを指定します。
-
-本文は `--body` オプションで指定できます。
-本文が未指定の場合は空文字として保存します。
-
-### メモの一覧を表示する
+### 追加・表示・検索
 
 ```bash
-memo list
+./memo add "Goのメモ" --body "interfaceについて調べる"
+./memo add "タイトルのみのメモ"
+./memo add "複数行のメモ" --body $'1行目\n2行目'
+./memo list
+./memo show 1
+./memo search interface
 ```
 
-出力例:
+`--body` を省略したときの本文は空文字です。本文の改行もそのまま保存され、`show` で表示できます（上の `$'…'` はBashの記法です）。`search` は大文字・小文字を区別します。追加時の作成日時と更新日時は同じです。`list` と `search` はID・タイトル・作成日を表示し、`show` は本文を含む詳細を表示します。
 
-```txt
-1  Goのエラーハンドリングについて学ぶ  2026-07-05
-2  JSONファイル保存を実装する          2026-07-05
-```
-
-一覧では、以下の情報を表示します。
-
-* ID
-* タイトル
-* 作成日
-
-### メモの詳細を表示する
+### 編集・削除
 
 ```bash
-memo show 1
+./memo edit 1 --title "新しいタイトル"
+./memo edit 1 --body "更新後の本文"
+./memo edit 1 --title "タイトル" --body "本文"
+./memo edit 1 --body ""  # 本文を空にする
+./memo show 1
+./memo delete 1
 ```
 
-出力例:
+編集では指定していない項目は変更しません。IDと作成日時は維持し、更新日時を編集時刻に変更します（同じ値を指定した場合も更新します）。`--title` の空文字・空白のみの指定、更新項目なし、存在しないIDはエラーになります。`add`、`edit`、`delete` は成功時に出力しません。
 
-```txt
-# Goのエラーハンドリングについて学ぶ
+## 保存先を変更する（`MEMO_PATH`）
 
-ID: 1
-Created: 2026-07-05 18:00
-Updated: 2026-07-05 18:00
-
-try-catch構文はなく、if文でハンドリングする
-```
-
-### メモを検索する
+環境変数 `MEMO_PATH` を指定した場合、そのJSONファイルだけを読み書きします。コマンドごとに同じ値を指定するか、シェルで環境変数をエクスポートしてください。
 
 ```bash
-memo search Go
+MEMO_PATH=/tmp/work-memos.json ./memo add "Work"
+MEMO_PATH=/tmp/work-memos.json ./memo list
+
+export MEMO_PATH="$HOME/work-memos.json"
+./memo list
 ```
 
-タイトルまたは本文にキーワードが含まれるメモを検索します。
+未設定、空文字、空白文字だけの場合は既定の `~/.memo/memos.json` を使います。`~/` で始まるパスはホームディレクトリに展開され、相対パスは実行時のカレントディレクトリを基準とします。`~` 単独や `~user/` は展開されません。空白以外を含むパスの前後の空白は削除しません。v0.2にグローバルな `--data-file` オプションはありません。
 
-最初の実装では、大文字・小文字を区別して検索します。
+## 保存形式と既存データ
 
-### メモを削除する
-
-```bash
-memo delete 1
-```
-
-指定したIDのメモを削除します。
-
-最初の実装では、削除前の確認メッセージは表示しません。
-
-## データ構造
-
-メモは以下のような構造体で表現します。
-
-```go
-type Memo struct {
-    ID        int       `json:"id"`
-    Title     string    `json:"title"`
-    Body      string    `json:"body"`
-    CreatedAt time.Time `json:"created_at"`
-    UpdatedAt time.Time `json:"updated_at"`
-}
-```
-
-## 保存形式
-
-メモはJSONファイルに保存します。
-
-保存データの例:
+メモはJSON配列として保存されます。主なフィールドは `id`、`title`、`body`、`created_at`、`updated_at` です。日時はRFC 3339形式です。
 
 ```json
 [
   {
     "id": 1,
-    "title": "Goのエラーハンドリングについて学ぶ",
-    "body": "try-catch構文はなく、if文でハンドリングする",
-    "created_at": "2026-07-05T18:00:00+09:00",
-    "updated_at": "2026-07-05T18:00:00+09:00"
-  },
-  {
-    "id": 2,
-    "title": "JSONファイル保存を実装する",
-    "body": "",
-    "created_at": "2026-07-05T18:10:00+09:00",
-    "updated_at": "2026-07-05T18:10:00+09:00"
+    "title": "Goのメモ",
+    "body": "interfaceについて調べる",
+    "created_at": "2026-09-27T18:00:00+09:00",
+    "updated_at": "2026-09-27T18:00:00+09:00"
   }
 ]
 ```
 
-## セットアップ
+v0.1.0で保存したJSONデータは移行操作なしでそのまま読み書きできます。通常のアップデートでは既定の保存先を変える必要はありません。`MEMO_PATH` で切り替えたファイルのメモは、既定のファイルとは別に管理されます。不正なJSONや読み書きできない保存先はエラーになり、既存のJSONを上書きしません。
 
-### 前提
+## v0.2の完成条件と確認
 
-Goがインストールされていること。
+- 本文の追加・検索・詳細表示、タイトルと本文の編集、既存の一覧・削除が動作する。
+- `MEMO_PATH` で保存先を切り替えられ、v0.1.0のJSONを移行なしで使用できる。
+- 主要な正常系・異常系のテストと、Pull RequestのCI（書式、静的解析、race detector付きテスト、ビルド）が成功する。
+- v0.2マイルストーンのIssueが完了し、READMEと[v0.2.0リリースノート](docs/releases/v0.2.0.md)を確認したうえでリリースする。
 
-```bash
-go version
-```
-
-### リポジトリをクローンする
-
-```bash
-git clone https://github.com/<your-name>/memo-cli.git
-cd memo-cli
-```
-
-### モジュールを初期化する
-
-新規作成時は以下を実行します。
+ローカルでの確認:
 
 ```bash
-go mod init github.com/<your-name>/memo-cli
+go vet ./...
+go test -race ./...
+go build ./...
 ```
 
-既に `go.mod` が存在する場合、この手順は不要です。
+## 開発の背景
 
-### ビルドする
+v0.1のMVPでは `add`、`list`、`show`、`search`、`delete` とJSONへの永続化を段階的に実装しました。当時の「これから作る」開発手順や仮のディレクトリ構成は、現行のセットアップ手順・仕様ではありません。過去の状態は[v0.1.0タグ](https://github.com/co191194/memo-cli/tree/v0.1.0)、v0.2の要件と受け入れ基準は[開発文書](docs/development/v0.2/requirements.md)と[仕様書](docs/development/v0.2/specification.md)を参照してください。現在の実装は `cmd/memo`、`internal/cli`、`internal/memo`、`internal/storage` に分かれています。
 
-```bash
-go build -o memo ./cmd/memo
-```
-
-### 実行する
-
-```bash
-./memo list
-```
-
-## 開発手順
-
-このプロジェクトは、以下の順番で実装します。
-
-### Step 1: プロジェクトを作成する
-
-```bash
-mkdir memo-cli
-cd memo-cli
-go mod init github.com/<your-name>/memo-cli
-```
-
-最初のファイル構成:
-
-```txt
-memo-cli/
-  go.mod
-  main.go
-  memo.go
-  store.go
-  memo_test.go
-  store_test.go
-```
-
-### Step 2: `Memo` 構造体を定義する
-
-まず、1件のメモを表す `Memo` 構造体を作成します。
-
-```go
-type Memo struct {
-    ID        int
-    Title     string
-    Body      string
-    CreatedAt time.Time
-    UpdatedAt time.Time
-}
-```
-
-### Step 3: メモをメモリ上で扱う
-
-最初はファイル保存を考えず、スライスで複数のメモを扱います。
-
-実装する処理:
-
-* メモを追加する
-* IDでメモを探す
-* キーワードでメモを検索する
-* IDでメモを削除する
-
-### Step 4: JSONファイルに保存する
-
-メモをJSONファイルへ保存・読み込みできるようにします。
-
-作成する関数の例:
-
-```go
-func LoadMemos(path string) ([]Memo, error)
-func SaveMemos(path string, memos []Memo) error
-```
-
-### Step 5: `add` コマンドを実装する
-
-```bash
-memo add "最初のメモ"
-```
-
-処理の流れ:
-
-1. JSONファイルから既存のメモを読み込む
-2. 新しいIDを採番する
-3. 新しいメモを作成する
-4. メモ一覧に追加する
-5. JSONファイルへ保存する
-
-IDの採番は、最初は「現在の最大ID + 1」とします。
-
-### Step 6: `list` コマンドを実装する
-
-```bash
-memo list
-```
-
-処理の流れ:
-
-1. JSONファイルからメモを読み込む
-2. メモの一覧を表示する
-
-### Step 7: `show` コマンドを実装する
-
-```bash
-memo show 1
-```
-
-指定されたIDのメモを検索し、詳細を表示します。
-
-対象のメモが存在しない場合は、エラーメッセージを表示します。
-
-```txt
-memo not found: 1
-```
-
-### Step 8: `search` コマンドを実装する
-
-```bash
-memo search Go
-```
-
-タイトルまたは本文にキーワードが含まれるメモを表示します。
-
-最初は `strings.Contains` を使って実装します。
-
-### Step 9: `delete` コマンドを実装する
-
-```bash
-memo delete 1
-```
-
-指定されたID以外のメモだけを残し、JSONファイルへ保存し直します。
-
-対象のメモが存在しない場合は、エラーとして扱います。
-
-### Step 10: テストを書く
-
-Go標準のテスト機能を使ってユニットテストを書きます。
-
-```bash
-go test ./...
-```
-
-テスト対象の例:
-
-* メモ追加時にIDが採番されること
-* IDでメモを取得できること
-* キーワードで検索できること
-* メモを削除できること
-* JSONファイルに保存できること
-* JSONファイルから読み込めること
-
-## ディレクトリ構成
-
-最初はシンプルな構成で実装します。
-
-```txt
-memo-cli/
-  go.mod
-  main.go
-  memo.go
-  store.go
-  memo_test.go
-  store_test.go
-```
-
-コードが増えてきたら、以下のような構成にリファクタリングします。
-
-```txt
-memo-cli/
-  go.mod
-  cmd/
-    memo/
-      main.go
-  internal/
-    memo/
-      memo.go
-      service.go
-    store/
-      json_store.go
-```
-
-## 最初は実装しない機能
-
-以下の機能は、MVP完成後に必要に応じて追加します。
-
-* MarkdownのHTMLプレビュー
-* タグ機能
-* カテゴリ機能
-* エディタ連携
-* 複数ファイル管理
-* SQLite対応
-* Git連携
-* Web UI
-* TUI表示
-* 暗号化
-
-## 今後の拡張案
-
-MVP完成後は、以下の機能を追加していく予定です。
-
-| 機能             | 学べること          |
-| -------------- | -------------- |
-| `edit` コマンド    | 既存データの更新処理     |
-| タグ機能           | スライス、検索条件      |
-| 設定ファイル         | OSごとのパス管理      |
-| SQLite対応       | データベースアクセス     |
-| Markdownファイル出力 | ファイル生成         |
-| テスト強化          | 設計改善           |
-| GitHub Actions | CI             |
-
-## 発展版のコマンド例
-
-将来的には、以下のようなコマンドに拡張できます。
-
-```bash
-memo edit 1
-memo list --limit 10
-memo search error --case-insensitive
-memo export 1 --format markdown
-memo open 1
-```
-
-## 完成条件
-
-MVPの完成条件は、以下のコマンドがすべて動作することです。
-
-```bash
-memo add "Goのstructを学ぶ"
-memo add "JSONファイル保存を実装する"
-memo list
-memo show 1
-memo search JSON
-memo delete 1
-memo list
-```
-
-加えて、メモがJSONファイルに永続化されていることを確認します。
+将来的な拡張候補には、タグ機能、SQLite対応、Markdown出力などがあります。`edit`、`MEMO_PATH`、CIはv0.2で対応済みです。
 
 ## ライセンス
 
